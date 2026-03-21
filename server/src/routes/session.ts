@@ -5,6 +5,63 @@ import { analyzeSession } from '../utils/analysisEngine.js';
 
 const router = express.Router();
 
+router.get('/draft', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const draft = await Session.findOne({ userId: req.userId, isDraft: true }).sort({ updatedAt: -1 });
+    if (!draft) {
+      return res.status(404).json({ message: 'No draft found' });
+    }
+    res.json(draft);
+  } catch (error) {
+    console.error('Draft fetch error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.put('/draft', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const {
+      content,
+      documentTitle,
+      htmlContent,
+      pageContents,
+      editorPreferences,
+      keystrokeData = [],
+      pastedEvents = []
+    } = req.body;
+
+    if (typeof content !== 'string' || typeof htmlContent !== 'string') {
+      return res.status(400).json({ message: 'Invalid draft payload' });
+    }
+
+    if (!Array.isArray(pageContents)) {
+      return res.status(400).json({ message: 'Invalid page payload' });
+    }
+
+    const sanitizedPages = pageContents.filter((page) => typeof page === 'string');
+    const nextDraft = await Session.findOneAndUpdate(
+      { userId: req.userId, isDraft: true },
+      {
+        userId: req.userId,
+        isDraft: true,
+        content,
+        documentTitle: typeof documentTitle === 'string' ? documentTitle : 'Untitled Document',
+        htmlContent,
+        pageContents: sanitizedPages,
+        editorPreferences: typeof editorPreferences === 'object' && editorPreferences ? editorPreferences : {},
+        keystrokeData: Array.isArray(keystrokeData) ? keystrokeData : [],
+        pastedEvents: Array.isArray(pastedEvents) ? pastedEvents : []
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.json(nextDraft);
+  } catch (error) {
+    console.error('Draft save error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { content, keystrokeData, pastedEvents } = req.body;

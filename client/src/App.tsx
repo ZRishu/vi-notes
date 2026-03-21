@@ -4,10 +4,13 @@ import Editor from './components/Editor';
 import Login from './components/Login';
 import Register from './components/Register';
 import { Moon, Sun, LogOut, ShieldCheck, LogIn } from 'lucide-react';
+import { hasValidAuthToken } from './api';
 import './App.css';
 
+const LOCAL_TITLE_KEY = 'vi-notes-document-title';
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const token = localStorage.getItem('token');
+  const token = hasValidAuthToken();
   return token ? <>{children}</> : <Navigate to="/login" />;
 };
 
@@ -19,12 +22,16 @@ function App() {
     }
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const [docTitle, setDocTitle] = useState('Untitled Document');
+  const [docTitle, setDocTitle] = useState(() => localStorage.getItem(LOCAL_TITLE_KEY) || 'Untitled Document');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_TITLE_KEY, docTitle);
+  }, [docTitle]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
@@ -36,7 +43,7 @@ function App() {
     window.location.href = '/login';
   };
 
-  const isLoggedIn = !!localStorage.getItem('token');
+  const isLoggedIn = hasValidAuthToken();
 
   return (
     <Router>
@@ -83,7 +90,7 @@ function App() {
           <Routes>
             <Route path="/" element={
               <ProtectedRoute>
-                <Editor />
+                <Editor docTitle={docTitle} setDocTitle={setDocTitle} />
               </ProtectedRoute>
             } />
             <Route path="/login" element={<Login />} />

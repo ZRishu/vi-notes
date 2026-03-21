@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import api from '../api';
+import api, { hasValidAuthToken } from '../api';
+import axios from 'axios';
 import TurndownService from 'turndown';
 import { 
   Undo, Redo, 
@@ -40,6 +41,47 @@ interface AnalysisResult {
   suspiciousFlags: string[];
   recommendation: string;
 }
+
+interface ActiveFormatsState {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikeThrough: boolean;
+  unorderedList: boolean;
+  orderedList: boolean;
+  blockquote: boolean;
+  codeBlock: boolean;
+}
+
+interface EditorDraftPayload {
+  documentTitle: string;
+  content: string;
+  htmlContent: string;
+  pageContents: string[];
+  editorPreferences: {
+    currentFont: string;
+    currentFontSize: string;
+    currentStyle: string;
+    currentAlign: string;
+    activeFormats: ActiveFormatsState;
+  };
+  updatedAt: string;
+}
+
+interface EditorProps {
+  docTitle: string;
+  setDocTitle: React.Dispatch<React.SetStateAction<string>>;
+}
+
+const readLocalDraft = (): EditorDraftPayload | null => {
+  const rawDraft = localStorage.getItem(LOCAL_DRAFT_KEY);
+  if (!rawDraft) return null;
+  try {
+    return JSON.parse(rawDraft) as EditorDraftPayload;
+  } catch {
+    return null;
+  }
+};
 
 const FONTS = [
   { name: 'Arial', family: 'Arial, sans-serif' },
@@ -258,6 +300,8 @@ const DEFAULT_COLORS = [
   '#5B0F00', '#660000', '#783F04', '#7F6000', '#274E13', '#0C343D', '#1C4587', '#073763', '#20124D', '#4C1130',
 ];
 
+const LOCAL_DRAFT_KEY = 'vi-notes-editor-draft';
+
 const getContrastColor = (hex: string) => {
   const { r, g, b } = hexToRgb(hex);
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
@@ -279,8 +323,15 @@ const getClosestFontSizeValue = (fontSizePx: number) => {
   ).value;
 };
 
-const Editor: React.FC = () => {
-  const [content, setContent] = useState('');
+const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
+  const initialDraftRef = useRef<EditorDraftPayload | null>(readLocalDraft());
+  const initialDraft = initialDraftRef.current;
+  const [content, setContent] = useState(() => initialDraft?.htmlContent || '');
+  const [pageIds, setPageIds] = useState(() =>
+    initialDraft?.pageContents?.length
+      ? initialDraft.pageContents.map((_, index) => `page-initial-${index + 1}`)
+      : ['page-1']
+  );
   const [keystrokeData, setKeystrokeData] = useState<KeystrokeEvent[]>([]);
   const [pastedEvents, setPastedEvents] = useState<PastedEvent[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -297,6 +348,8 @@ const Editor: React.FC = () => {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showMathModal, setShowMathModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [isDraftReady, setIsDraftReady] = useState(false);
+  const [serverDraftEnabled, setServerDraftEnabled] = useState(() => hasValidAuthToken());
   
   const [linkUrl, setLinkUrl] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -310,22 +363,23 @@ const Editor: React.FC = () => {
   const [hsvInput, setHsvInput] = useState({ h: 0, s: 0, v: 0 });
   const [cmykInput, setCmykInput] = useState({ c: 0, m: 0, y: 0, k: 100 });
   
-  const [currentFont, setCurrentFont] = useState('Inter');
-  const [currentFontSize, setCurrentFontSize] = useState('3');
-  const [currentStyle, setCurrentStyle] = useState('Normal Text');
-  const [currentAlign, setCurrentAlign] = useState('Left');
-  const [activeFormats, setActiveFormats] = useState({
-    bold: false,
-    italic: false,
-    underline: false,
-    strikeThrough: false,
-    unorderedList: false,
-    orderedList: false,
-    blockquote: false,
-    codeBlock: false,
+  const [currentFont, setCurrentFont] = useState(() => initialDraft?.editorPreferences?.currentFont || 'Inter');
+  const [currentFontSize, setCurrentFontSize] = useState(() => initialDraft?.editorPreferences?.currentFontSize || '3');
+  const [currentStyle, setCurrentStyle] = useState(() => initialDraft?.editorPreferences?.currentStyle || 'Normal Text');
+  const [currentAlign, setCurrentAlign] = useState(() => initialDraft?.editorPreferences?.currentAlign || 'Left');
+  const [activeFormats, setActiveFormats] = useState<ActiveFormatsState>({
+    bold: initialDraft?.editorPreferences?.activeFormats?.bold || false,
+    italic: initialDraft?.editorPreferences?.activeFormats?.italic || false,
+    underline: initialDraft?.editorPreferences?.activeFormats?.underline || false,
+    strikeThrough: initialDraft?.editorPreferences?.activeFormats?.strikeThrough || false,
+    unorderedList: initialDraft?.editorPreferences?.activeFormats?.unorderedList || false,
+    orderedList: initialDraft?.editorPreferences?.activeFormats?.orderedList || false,
+    blockquote: initialDraft?.editorPreferences?.activeFormats?.blockquote || false,
+    codeBlock: initialDraft?.editorPreferences?.activeFormats?.codeBlock || false,
   });
   
   const editorRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const fontDropdownRef = useRef<HTMLDivElement>(null);
   const fontSizeDropdownRef = useRef<HTMLDivElement>(null);
   const styleDropdownRef = useRef<HTMLDivElement>(null);
@@ -338,6 +392,10 @@ const Editor: React.FC = () => {
   const hueSliderRef = useRef<HTMLDivElement>(null);
   const keyDownTimes = useRef<{ [key: string]: number }>({});
   const savedColorSelectionRef = useRef<Range | null>(null);
+  const pendingPaginationRef = useRef(false);
+  const isPaginatingRef = useRef(false);
+  const pendingHydrationRef = useRef<EditorDraftPayload | null>(initialDraft);
+  const lastServerSavedAtRef = useRef('');
   
   const textContent = content.replace(/<[^>]*>?/gm, '');
   const wordCount = textContent.trim().split(/\s+/).filter(w => w.length > 0).length;
@@ -357,7 +415,337 @@ const Editor: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInput = () => { if (editorRef.current) setContent(editorRef.current.innerHTML); };
+  useEffect(() => {
+    if (initialDraft?.documentTitle) {
+      setDocTitle(initialDraft.documentTitle);
+    }
+  }, [initialDraft, setDocTitle]);
+
+  const isWritingAreaElement = (element: Element | null): element is HTMLDivElement =>
+    !!element && element.classList.contains('writing-area');
+
+  const getWritingPages = () =>
+    pageIds
+      .map(pageId => pageRefs.current[pageId])
+      .filter((page): page is HTMLDivElement => !!page);
+
+  const getDocumentHtml = () =>
+    getWritingPages()
+      .map(page => page.innerHTML)
+      .join('<div><br></div>');
+
+  const syncContent = () => {
+    setContent(getDocumentHtml());
+  };
+
+  const getActiveWritingPage = (selection: Selection | null = window.getSelection()) => {
+    if (!selection || selection.rangeCount === 0) return getWritingPages()[0] ?? null;
+    let node: Node | null = selection.getRangeAt(0).startContainer;
+    while (node) {
+      if (node instanceof Element && isWritingAreaElement(node)) return node;
+      node = node.parentNode;
+    }
+    return getWritingPages()[0] ?? null;
+  };
+
+  const createPageId = () => `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const createPageIds = (count: number) =>
+    Array.from({ length: Math.max(count, 1) }, () => createPageId());
+
+  const getDraftPayload = useCallback((): EditorDraftPayload => {
+    const pageContents = getWritingPages().map((page) => page.innerHTML);
+    const htmlContent = pageContents.join('<div><br></div>');
+
+    return {
+      documentTitle: docTitle,
+      content: textContent,
+      htmlContent,
+      pageContents,
+      editorPreferences: {
+        currentFont,
+        currentFontSize,
+        currentStyle,
+        currentAlign,
+        activeFormats,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, textContent, pageIds]);
+
+  const saveDraftLocally = useCallback((draft: EditorDraftPayload) => {
+    try {
+      localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draft));
+    } catch (error) {
+      console.error('Local draft save failed:', error);
+    }
+  }, []);
+
+  const applyDraft = useCallback((draft: EditorDraftPayload) => {
+    pendingHydrationRef.current = draft;
+    setDocTitle(draft.documentTitle || 'Untitled Document');
+    setCurrentFont(draft.editorPreferences.currentFont || 'Inter');
+    setCurrentFontSize(draft.editorPreferences.currentFontSize || '3');
+    setCurrentStyle(draft.editorPreferences.currentStyle || 'Normal Text');
+    setCurrentAlign(draft.editorPreferences.currentAlign || 'Left');
+    setActiveFormats(draft.editorPreferences.activeFormats || {
+      bold: false,
+      italic: false,
+      underline: false,
+      strikeThrough: false,
+      unorderedList: false,
+      orderedList: false,
+      blockquote: false,
+      codeBlock: false,
+    });
+    setContent(draft.htmlContent || '');
+    setPageIds(createPageIds(draft.pageContents.length));
+  }, [setDocTitle]);
+
+  const appendPageAfter = useCallback((page: HTMLDivElement) => {
+    const nextPageId = createPageId();
+    setPageIds(prev => {
+      const currentIndex = prev.findIndex(pageId => pageRefs.current[pageId] === page);
+      if (currentIndex === -1) return [...prev, nextPageId];
+      return [...prev.slice(0, currentIndex + 1), nextPageId, ...prev.slice(currentIndex + 1)];
+    });
+    pendingPaginationRef.current = true;
+  }, []);
+
+  const normalizePageChildren = (page: HTMLDivElement) => {
+    Array.from(page.childNodes).forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        if ((child.textContent ?? '').trim().length === 0) {
+          page.removeChild(child);
+          return;
+        }
+        const line = document.createElement('div');
+        line.textContent = child.textContent ?? '';
+        page.replaceChild(line, child);
+      }
+    });
+  };
+
+  const isPageEmpty = (page: HTMLDivElement) => {
+    const clone = page.cloneNode(true) as HTMLDivElement;
+    clone.querySelectorAll('br').forEach(br => br.remove());
+    return clone.textContent?.trim().length === 0;
+  };
+
+  const cleanupTrailingEmptyPages = useCallback(() => {
+    const pages = getWritingPages();
+    const removableIds: string[] = [];
+    let keptTrailingEmptyPage = false;
+
+    for (let index = pages.length - 1; index > 0; index -= 1) {
+      if (!isPageEmpty(pages[index])) break;
+
+      if (!keptTrailingEmptyPage) {
+        keptTrailingEmptyPage = true;
+        continue;
+      }
+
+      const pageId = pageIds[index];
+      if (pageId) removableIds.push(pageId);
+    }
+    if (removableIds.length > 0) {
+      setPageIds(prev => prev.filter(pageId => !removableIds.includes(pageId)));
+    }
+  }, [pageIds]);
+
+  const paginateDocument = useCallback(() => {
+    if (isPaginatingRef.current) return;
+    const pages = getWritingPages();
+    if (pages.length === 0) return;
+
+    isPaginatingRef.current = true;
+    try {
+      for (let index = 0; index < pages.length; index += 1) {
+        const page = pages[index];
+        normalizePageChildren(page);
+        while (page.scrollHeight > page.clientHeight + 1) {
+          if (page.childNodes.length <= 1) break;
+          const nextPage = pages[index + 1];
+          if (!nextPage) {
+            appendPageAfter(page);
+            return;
+          }
+
+          const nodeToMove = page.lastChild;
+          if (!nodeToMove) break;
+          normalizePageChildren(nextPage);
+          nextPage.insertBefore(nodeToMove, nextPage.firstChild);
+        }
+      }
+      cleanupTrailingEmptyPages();
+      syncContent();
+    } finally {
+      isPaginatingRef.current = false;
+    }
+  }, [appendPageAfter, cleanupTrailingEmptyPages, pageIds]);
+
+  const schedulePagination = useCallback(() => {
+    pendingPaginationRef.current = true;
+    requestAnimationFrame(() => {
+      if (!pendingPaginationRef.current) return;
+      pendingPaginationRef.current = false;
+      paginateDocument();
+    });
+  }, [paginateDocument]);
+
+  useEffect(() => {
+    if (!pendingPaginationRef.current) return;
+    const frameId = requestAnimationFrame(() => {
+      if (!pendingPaginationRef.current) return;
+      pendingPaginationRef.current = false;
+      paginateDocument();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [pageIds, paginateDocument]);
+
+  useEffect(() => {
+    const pendingDraft = pendingHydrationRef.current;
+    if (!pendingDraft) return;
+
+    const frameId = requestAnimationFrame(() => {
+      const pages = getWritingPages();
+      pages.forEach((page, index) => {
+        page.innerHTML = pendingDraft.pageContents[index] ?? '';
+      });
+      pendingHydrationRef.current = null;
+      syncContent();
+      setIsDraftReady(true);
+      lastServerSavedAtRef.current = pendingDraft.updatedAt;
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [pageIds]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDraft = async () => {
+      let freshestDraft = initialDraft;
+
+      if (!hasValidAuthToken()) {
+        if (!cancelled && !freshestDraft) {
+          setIsDraftReady(true);
+        }
+        setServerDraftEnabled(false);
+        return;
+      }
+
+      try {
+        const { data } = await api.get('/sessions/draft');
+        const remoteDraft: EditorDraftPayload = {
+          documentTitle: data.documentTitle || 'Untitled Document',
+          content: data.content || '',
+          htmlContent: data.htmlContent || '',
+          pageContents: Array.isArray(data.pageContents) && data.pageContents.length > 0 ? data.pageContents : [data.htmlContent || ''],
+          editorPreferences: {
+            currentFont: data.editorPreferences?.currentFont || 'Inter',
+            currentFontSize: data.editorPreferences?.currentFontSize || '3',
+            currentStyle: data.editorPreferences?.currentStyle || 'Normal Text',
+            currentAlign: data.editorPreferences?.currentAlign || 'Left',
+            activeFormats: data.editorPreferences?.activeFormats || {
+              bold: false,
+              italic: false,
+              underline: false,
+              strikeThrough: false,
+              unorderedList: false,
+              orderedList: false,
+              blockquote: false,
+              codeBlock: false,
+            },
+          },
+          updatedAt: data.updatedAt || new Date(0).toISOString(),
+        };
+
+        const localTime = initialDraft ? new Date(initialDraft.updatedAt).getTime() : 0;
+        const remoteTime = new Date(remoteDraft.updatedAt).getTime();
+        if (!cancelled && remoteTime > localTime) {
+          freshestDraft = remoteDraft;
+          applyDraft(remoteDraft);
+          saveDraftLocally(remoteDraft);
+        }
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          setServerDraftEnabled(false);
+        }
+      } finally {
+        if (!cancelled && !freshestDraft) {
+          setIsDraftReady(true);
+        }
+      }
+    };
+
+    loadDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyDraft, initialDraft, saveDraftLocally]);
+
+  useEffect(() => {
+    if (!isDraftReady) return;
+
+    const timeoutId = window.setTimeout(() => {
+      const draft = getDraftPayload();
+      saveDraftLocally(draft);
+    }, 100);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, content, isDraftReady, pageIds, saveDraftLocally, getDraftPayload]);
+
+  useEffect(() => {
+    if (!isDraftReady || !serverDraftEnabled) return;
+
+    const timeoutId = window.setTimeout(async () => {
+      const draft = getDraftPayload();
+      if (draft.updatedAt === lastServerSavedAtRef.current) return;
+
+      try {
+        const { data } = await api.put('/sessions/draft', {
+          content: draft.content,
+          documentTitle: draft.documentTitle,
+          htmlContent: draft.htmlContent,
+          pageContents: draft.pageContents,
+          editorPreferences: draft.editorPreferences,
+          keystrokeData,
+          pastedEvents,
+        });
+        lastServerSavedAtRef.current = data.updatedAt || draft.updatedAt;
+        saveDraftLocally({
+          ...draft,
+          updatedAt: data.updatedAt || draft.updatedAt,
+        });
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          setServerDraftEnabled(false);
+          return;
+        }
+        console.error('Draft autosave failed:', error);
+      }
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [content, docTitle, activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, isDraftReady, keystrokeData, pageIds, pastedEvents, getDraftPayload, saveDraftLocally, serverDraftEnabled]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!isDraftReady) return;
+      const draft = getDraftPayload();
+      saveDraftLocally(draft);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [getDraftPayload, isDraftReady, saveDraftLocally]);
+
+  const handleInput = () => {
+    syncContent();
+    saveDraftLocally(getDraftPayload());
+    schedulePagination();
+  };
 
   const getNormalizedLineText = (value: string) => value.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
 
@@ -382,14 +770,16 @@ const Editor: React.FC = () => {
       range.collapse(true);
       selection.removeAllRanges();
       selection.addRange(range);
-      if (editorRef.current) setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
       return;
     }
 
     if (e.key === 'Enter' && activePre) {
       e.preventDefault();
       document.execCommand('insertText', false, '\n');
-      if (editorRef.current) setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
       return;
     }
 
@@ -403,7 +793,8 @@ const Editor: React.FC = () => {
       range.collapse(true);
       selection.removeAllRanges();
       selection.addRange(range);
-      if (editorRef.current) setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
       return;
     }
 
@@ -424,11 +815,15 @@ const Editor: React.FC = () => {
     const pastedText = e.clipboardData.getData('text/plain');
     document.execCommand('insertText', false, pastedText);
     setPastedEvents(prev => [...prev, { timestamp: Date.now(), textLength: pastedText.length }]);
+    schedulePagination();
   };
 
   const execCommand = (command: string, value: string | undefined = undefined) => {
     document.execCommand(command, false, value);
-    if (editorRef.current) { editorRef.current.focus(); setContent(editorRef.current.innerHTML); }
+    const activePage = getActiveWritingPage();
+    if (activePage) activePage.focus();
+    syncContent();
+    schedulePagination();
   };
 
   const getSelectionContextElement = useCallback(() => {
@@ -443,7 +838,7 @@ const Editor: React.FC = () => {
 
   const findClosestTag = (element: Element | null, tags: string[]) => {
     let current: Element | null = element;
-    while (current && current !== editorRef.current) {
+    while (current && current !== editorRef.current && !isWritingAreaElement(current)) {
       if (tags.includes(current.tagName)) return current;
       current = current.parentElement;
     }
@@ -566,7 +961,8 @@ const Editor: React.FC = () => {
 
     list.replaceWith(fragment);
     moveCaretToNodeStart(selection, plainLine);
-    setContent(editorRef.current?.innerHTML ?? '');
+    syncContent();
+    schedulePagination();
   };
 
   const applyListStyle = (style: 'disc' | 'circle' | 'square') => {
@@ -588,10 +984,10 @@ const Editor: React.FC = () => {
       currentList.style.listStyleType = style;
     }
 
-    if (editorRef.current) {
-      editorRef.current.focus();
-      setContent(editorRef.current.innerHTML);
-    }
+    const activePage = getActiveWritingPage();
+    if (activePage) activePage.focus();
+    syncContent();
+    schedulePagination();
     setShowListDropdown(false);
   };
 
@@ -706,7 +1102,8 @@ const Editor: React.FC = () => {
       restoreColorSelection();
       if (colorMode === 'text') document.execCommand('foreColor', false, currentColor);
       else document.execCommand('backColor', false, currentColor);
-      setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
     }
     setShowColorPicker(false);
   }, [colorMode, currentColor]);
@@ -749,7 +1146,8 @@ const Editor: React.FC = () => {
     nextLine.appendChild(document.createElement('br'));
     pre.insertAdjacentElement('afterend', nextLine);
     moveCaretToNodeStart(selection, nextLine);
-    if (editorRef.current) setContent(editorRef.current.innerHTML);
+    syncContent();
+    schedulePagination();
   };
 
   const isRangeAtPreEnd = (range: Range, pre: Element) => {
@@ -760,23 +1158,25 @@ const Editor: React.FC = () => {
   };
 
   const getCurrentLineElement = (node: Node) => {
-    if (!editorRef.current) return null;
+    const activePage = getActiveWritingPage();
+    if (!activePage) return null;
     let element = getElementFromNode(node);
-    while (element && element !== editorRef.current) {
-      if (element.tagName === 'BLOCKQUOTE' || element.parentElement === editorRef.current) return element;
+    while (element && element !== activePage) {
+      if (element.tagName === 'BLOCKQUOTE' || element.parentElement === activePage) return element;
       element = element.parentElement;
     }
     return null;
   };
 
   const ensureCurrentLineElement = (range: Range, selection: Selection) => {
-    if (!editorRef.current) return null;
+    const activePage = getActiveWritingPage(selection);
+    if (!activePage) return null;
 
     const existingLine = getCurrentLineElement(range.startContainer);
     if (existingLine) return existingLine;
 
     const container = range.startContainer;
-    if (container.nodeType === Node.TEXT_NODE && container.parentNode === editorRef.current) {
+    if (container.nodeType === Node.TEXT_NODE && container.parentNode === activePage) {
       const wrapper = document.createElement('div');
       container.parentNode.replaceChild(wrapper, container);
       wrapper.appendChild(container);
@@ -788,21 +1188,21 @@ const Editor: React.FC = () => {
       return wrapper;
     }
 
-    if (container === editorRef.current) {
-      const childIndex = Math.min(range.startOffset, editorRef.current.childNodes.length - 1);
-      const targetChild = editorRef.current.childNodes[childIndex] ?? editorRef.current.childNodes[childIndex - 1];
+    if (container === activePage) {
+      const childIndex = Math.min(range.startOffset, activePage.childNodes.length - 1);
+      const targetChild = activePage.childNodes[childIndex] ?? activePage.childNodes[childIndex - 1];
 
       if (!targetChild) {
         const line = document.createElement('div');
         line.appendChild(document.createElement('br'));
-        editorRef.current.appendChild(line);
+        activePage.appendChild(line);
         moveCaretToNodeStart(selection, line);
         return line;
       }
 
       if (targetChild.nodeType === Node.TEXT_NODE) {
         const wrapper = document.createElement('div');
-        editorRef.current.replaceChild(wrapper, targetChild);
+        activePage.replaceChild(wrapper, targetChild);
         wrapper.appendChild(targetChild);
         const nextRange = document.createRange();
         nextRange.setStart(targetChild, 0);
@@ -836,7 +1236,8 @@ const Editor: React.FC = () => {
 
     lineElement.replaceWith(replacement);
     moveCaretToNodeStart(selection, replacement);
-    setContent(editorRef.current.innerHTML);
+    syncContent();
+    schedulePagination();
   };
 
   const toggleCodeBlock = () => {
@@ -889,7 +1290,8 @@ const Editor: React.FC = () => {
         selection.removeAllRanges();
         selection.addRange(nextRange);
       }
-      setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
       return;
     }
 
@@ -903,7 +1305,8 @@ const Editor: React.FC = () => {
       caretRange.collapse(true);
       selection.removeAllRanges();
       selection.addRange(caretRange);
-      setContent(editorRef.current.innerHTML);
+      syncContent();
+      schedulePagination();
       return;
     }
 
@@ -918,7 +1321,8 @@ const Editor: React.FC = () => {
     afterRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(afterRange);
-    setContent(editorRef.current.innerHTML);
+    syncContent();
+    schedulePagination();
   };
 
   const handleHexInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { setHexInput(e.target.value); if (/^#[0-9A-F]{6}$/i.test(e.target.value)) updateAllColorFormats(e.target.value); };
@@ -997,15 +1401,14 @@ const Editor: React.FC = () => {
   };
 
   const insertHorizontalRule = () => execCommand('insertHorizontalRule');
-  const getDocumentTitle = () => {
-    const titleInput = document.querySelector('.header-doc-title') as HTMLInputElement;
-    return titleInput && titleInput.value ? titleInput.value.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'document';
-  };
+  const getDocumentTitle = () => (
+    docTitle ? docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'document'
+  );
   const handlePrint = () => { window.print(); setShowExportDropdown(false); };
   const handleExportMarkdown = () => {
     if (!editorRef.current) return;
     const turndown = new TurndownService({ headingStyle: 'atx', hr: '---', bulletListMarker: '-', codeBlockStyle: 'fenced' });
-    const markdown = turndown.turndown(editorRef.current.innerHTML);
+    const markdown = turndown.turndown(getDocumentHtml());
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
     link.download = `${getDocumentTitle()}.md`; link.click(); setShowExportDropdown(false);
@@ -1016,7 +1419,7 @@ const Editor: React.FC = () => {
     editorRef.current.style.backgroundColor = '#ffffff'; editorRef.current.style.color = '#000000';
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      await html2pdf().from(editorRef.current).set({ margin: 1, filename: `${getDocumentTitle()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' } }).save();
+      await html2pdf().from(editorRef.current).set({ margin: 0, filename: `${getDocumentTitle()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).save();
     } finally { if (editorRef.current) { editorRef.current.style.backgroundColor = originalBg; editorRef.current.style.color = originalColor; } }
     setShowExportDropdown(false);
   };
@@ -1177,7 +1580,24 @@ const Editor: React.FC = () => {
           </div>
         </div>
         <div className="page-container">
-          <div ref={editorRef} className="writing-area" contentEditable={true} onInput={handleInput} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPaste={handlePaste} data-placeholder="Start writing your document here..." spellCheck={false} style={{ fontFamily: 'var(--text-primary-font, inherit)' }} />
+          <div ref={editorRef} className="document-pages">
+            {pageIds.map((pageId) => (
+              <div
+                key={pageId}
+                ref={(node) => { pageRefs.current[pageId] = node; }}
+                className="writing-area"
+                contentEditable={true}
+                suppressContentEditableWarning={true}
+                onInput={handleInput}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
+                onPaste={handlePaste}
+                data-placeholder="Start writing your document here..."
+                spellCheck={false}
+                style={{ fontFamily: 'var(--text-primary-font, inherit)' }}
+              />
+            ))}
+          </div>
         </div>
       </div>
       {showLinkModal && (

@@ -572,11 +572,20 @@ header {
   align-items: center;
 }
 
-.writing-area {
+.document-pages {
   width: 100%;
-  max-width: 816px; /* Standard page width */
-  min-height: 1056px; /* Standard page height */
-  padding: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.writing-area {
+  width: 210mm;
+  max-width: 100%;
+  height: 297mm;
+  min-height: 297mm;
+  padding: 20mm;
   background-color: var(--surface-color);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
@@ -587,6 +596,8 @@ header {
   font-family: 'Inter', sans-serif;
   resize: none;
   border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .writing-area:empty:before {
@@ -902,11 +913,16 @@ header {
     padding: 0 !important;
   }
 
+  .document-pages {
+    display: block !important;
+  }
+
   .writing-area {
     max-width: none !important;
-    width: 100% !important;
-    min-height: auto !important;
-    margin: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    margin: 0 auto !important;
     padding: 0.5in !important;
     border: none !important;
     border-radius: 0 !important;
@@ -915,6 +931,13 @@ header {
     box-shadow: none !important;
     font-size: 12pt !important;
     line-height: 1.6 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .writing-area:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
   .writing-area:empty::before {
@@ -1569,4 +1592,27 @@ header {
   .color-swatches-grid-defaults {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
+}
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.55;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
