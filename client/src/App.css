@@ -28,6 +28,16 @@
   --scrollbar-bg: transparent;
   --scrollbar-thumb: #b4aba0;
   --scrollbar-thumb-hover: #9f968b;
+
+  --md-heading: #1f2328;
+  --md-body: #1f2328;
+  --md-muted: #59636e;
+  --md-code-bg: #f6f8fa;
+  --md-pre-bg: #f6f8fa;
+  --md-pre-border: #d0d7de;
+  --md-quote-border: #d0d7de;
+  --md-link: #0969da;
+  --md-hr: #d0d7de;
 }
 
 [data-theme='dark'] {
@@ -58,6 +68,16 @@
   --scrollbar-bg: transparent;
   --scrollbar-thumb: #484f58;
   --scrollbar-thumb-hover: #6e7681;
+
+  --md-heading: #f0f6fc;
+  --md-body: #e6edf3;
+  --md-muted: #9198a1;
+  --md-code-bg: #161b22;
+  --md-pre-bg: #161b22;
+  --md-pre-border: #30363d;
+  --md-quote-border: #3d444d;
+  --md-link: #58a6ff;
+  --md-hr: #30363d;
 }
 
 * {
@@ -617,6 +637,110 @@ header {
   margin-top: 16px;
 }
 
+.dashboard-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px;
+  background:
+    radial-gradient(circle at top, rgba(47, 111, 235, 0.08), transparent 26%),
+    var(--bg-color);
+}
+
+.dashboard-header {
+  max-width: 1280px;
+  margin: 0 auto 28px;
+}
+
+.dashboard-header h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.dashboard-header p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.documents-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.document-card {
+  min-height: 220px;
+  padding: 22px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.document-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent-color);
+}
+
+.document-card-icon,
+.create-document-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  background: var(--surface-muted);
+  color: var(--accent-color);
+}
+
+.create-document-card {
+  border-style: dashed;
+  justify-content: center;
+}
+
+.create-document-card .create-document-icon {
+  background: var(--accent-light);
+}
+
+.document-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.document-card-preview {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: auto;
+}
+
+.document-card-meta {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .score-display {
   display: flex;
   align-items: baseline;
@@ -782,30 +906,55 @@ header {
 }
 
 /* GitHub Markdown Styles within the Writing Area */
+.writing-area {
+  color: var(--md-body);
+}
+
+.writing-area > *:first-child {
+  margin-top: 0 !important;
+}
+
 .writing-area h1,
-.writing-area h2 {
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 0.3em;
+.writing-area h2,
+.writing-area h3,
+.writing-area h4,
+.writing-area h5,
+.writing-area h6 {
   margin-top: 24px;
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
+  color: var(--md-heading);
 }
 
 .writing-area h1 {
+  padding-bottom: 0.3em;
+  margin-top: 0;
   font-size: 2em;
+  border-bottom: 1px solid var(--md-hr);
 }
 
 .writing-area h2 {
+  padding-bottom: 0.3em;
   font-size: 1.5em;
+  border-bottom: 1px solid var(--md-hr);
 }
 
 .writing-area h3 {
   font-size: 1.25em;
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
+}
+
+.writing-area h4 {
+  font-size: 1em;
+}
+
+.writing-area h5 {
+  font-size: 0.875em;
+}
+
+.writing-area h6 {
+  font-size: 0.85em;
+  color: var(--md-muted);
 }
 
 .writing-area p {
@@ -814,19 +963,23 @@ header {
 }
 
 .writing-area blockquote {
-  margin: 0;
+  margin: 0 0 16px;
   padding: 0 1em;
-  color: var(--text-secondary);
-  border-left: 0.25em solid var(--border-color);
+  color: var(--md-muted);
+  border-left: 0.25em solid var(--md-quote-border);
 }
 
 .writing-area pre {
+  margin-top: 0;
+  margin-bottom: 16px;
   padding: 16px;
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: var(--bg-color);
+  color: var(--md-body);
+  background-color: var(--md-pre-bg);
   border-radius: 6px;
+  border: 1px solid var(--md-pre-border);
   font-family: 'Fira Code', ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }
 
@@ -834,7 +987,8 @@ header {
   padding: 0.2em 0.4em;
   margin: 0;
   font-size: 85%;
-  background-color: var(--bg-color);
+  color: inherit;
+  background-color: var(--md-code-bg);
   border-radius: 6px;
   font-family: 'Fira Code', ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }
@@ -853,7 +1007,7 @@ header {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: var(--border-color);
+  background-color: var(--md-hr);
   border: 0;
 }
 
@@ -866,6 +1020,20 @@ header {
 
 .writing-area li {
   margin-top: 0.25em;
+  color: var(--md-body);
+}
+
+.writing-area li > p {
+  margin-bottom: 0.35em;
+}
+
+.writing-area strong {
+  font-weight: 600;
+}
+
+.writing-area mark {
+  color: inherit;
+  background-color: rgba(255, 212, 59, 0.45);
 }
 
 .writing-area img {
@@ -875,12 +1043,48 @@ header {
 }
 
 .writing-area a {
-  color: var(--accent-color);
+  color: var(--md-link);
   text-decoration: none;
 }
 
 .writing-area a:hover {
   text-decoration: underline;
+}
+
+.compatibility-screen {
+  min-height: 100vh;
+  padding: 32px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at top, rgba(47, 111, 235, 0.14), transparent 34%),
+    linear-gradient(180deg, var(--bg-color), var(--surface-muted));
+}
+
+.compatibility-card {
+  width: min(100%, 420px);
+  padding: 28px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.compatibility-card h1 {
+  margin: 18px 0 12px;
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.compatibility-card p {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+}
+
+.compatibility-card p:last-child {
+  margin-bottom: 0;
 }
 
 @media print {

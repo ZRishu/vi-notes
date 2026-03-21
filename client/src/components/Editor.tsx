@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api, { hasValidAuthToken } from '../api';
-import axios from 'axios';
 import TurndownService from 'turndown';
+import { useNavigate } from 'react-router-dom';
 import { 
   Undo, Redo, 
   Bold, Italic, Underline, Strikethrough,
@@ -58,6 +58,8 @@ interface EditorDraftPayload {
   content: string;
   htmlContent: string;
   pageContents: string[];
+  keystrokeData: KeystrokeEvent[];
+  pastedEvents: PastedEvent[];
   editorPreferences: {
     currentFont: string;
     currentFontSize: string;
@@ -71,6 +73,9 @@ interface EditorDraftPayload {
 interface EditorProps {
   docTitle: string;
   setDocTitle: React.Dispatch<React.SetStateAction<string>>;
+  isAuthenticated: boolean;
+  documentId?: string | null;
+  autoRunAnalysis?: boolean;
 }
 
 const readLocalDraft = (): EditorDraftPayload | null => {
@@ -301,6 +306,7 @@ const DEFAULT_COLORS = [
 ];
 
 const LOCAL_DRAFT_KEY = 'vi-notes-editor-draft';
+const LOCAL_PENDING_ANALYSIS_KEY = 'vi-notes-pending-analysis';
 
 const getContrastColor = (hex: string) => {
   const { r, g, b } = hexToRgb(hex);
@@ -323,8 +329,9 @@ const getClosestFontSizeValue = (fontSizePx: number) => {
   ).value;
 };
 
-const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
-  const initialDraftRef = useRef<EditorDraftPayload | null>(readLocalDraft());
+const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated, documentId = null, autoRunAnalysis = false }) => {
+  const navigate = useNavigate();
+  const initialDraftRef = useRef<EditorDraftPayload | null>(isAuthenticated ? null : readLocalDraft());
   const initialDraft = initialDraftRef.current;
   const [content, setContent] = useState(() => initialDraft?.htmlContent || '');
   const [pageIds, setPageIds] = useState(() =>
@@ -349,7 +356,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
   const [showMathModal, setShowMathModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [isDraftReady, setIsDraftReady] = useState(false);
-  const [serverDraftEnabled, setServerDraftEnabled] = useState(() => hasValidAuthToken());
+  const [isDocumentLoaded, setIsDocumentLoaded] = useState(() => !isAuthenticated);
   
   const [linkUrl, setLinkUrl] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -396,6 +403,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
   const isPaginatingRef = useRef(false);
   const pendingHydrationRef = useRef<EditorDraftPayload | null>(initialDraft);
   const lastServerSavedAtRef = useRef('');
+  const autoRunAnalysisRef = useRef(false);
   
   const textContent = content.replace(/<[^>]*>?/gm, '');
   const wordCount = textContent.trim().split(/\s+/).filter(w => w.length > 0).length;
@@ -416,10 +424,10 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
   }, []);
 
   useEffect(() => {
-    if (initialDraft?.documentTitle) {
+    if (!isAuthenticated && initialDraft?.documentTitle) {
       setDocTitle(initialDraft.documentTitle);
     }
-  }, [initialDraft, setDocTitle]);
+  }, [initialDraft, isAuthenticated, setDocTitle]);
 
   const isWritingAreaElement = (element: Element | null): element is HTMLDivElement =>
     !!element && element.classList.contains('writing-area');
@@ -461,6 +469,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
       content: textContent,
       htmlContent,
       pageContents,
+      keystrokeData,
+      pastedEvents,
       editorPreferences: {
         currentFont,
         currentFontSize,
@@ -470,7 +480,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
       },
       updatedAt: new Date().toISOString(),
     };
-  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, textContent, pageIds]);
+  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, keystrokeData, pastedEvents, textContent, pageIds]);
 
   const saveDraftLocally = useCallback((draft: EditorDraftPayload) => {
     try {
@@ -487,6 +497,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
     setCurrentFontSize(draft.editorPreferences.currentFontSize || '3');
     setCurrentStyle(draft.editorPreferences.currentStyle || 'Normal Text');
     setCurrentAlign(draft.editorPreferences.currentAlign || 'Left');
+    setKeystrokeData(Array.isArray(draft.keystrokeData) ? draft.keystrokeData : []);
+    setPastedEvents(Array.isArray(draft.pastedEvents) ? draft.pastedEvents : []);
     setActiveFormats(draft.editorPreferences.activeFormats || {
       bold: false,
       italic: false,
@@ -614,6 +626,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
       pendingHydrationRef.current = null;
       syncContent();
       setIsDraftReady(true);
+      setIsDocumentLoaded(true);
       lastServerSavedAtRef.current = pendingDraft.updatedAt;
     });
 
@@ -623,24 +636,24 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadDraft = async () => {
-      let freshestDraft = initialDraft;
-
-      if (!hasValidAuthToken()) {
-        if (!cancelled && !freshestDraft) {
+    const loadEditorState = async () => {
+      if (!isAuthenticated || !documentId || !hasValidAuthToken()) {
+        if (!cancelled && !initialDraft) {
           setIsDraftReady(true);
+          setIsDocumentLoaded(true);
         }
-        setServerDraftEnabled(false);
         return;
       }
 
       try {
-        const { data } = await api.get('/sessions/draft');
+        const { data } = await api.get(`/documents/${documentId}`);
         const remoteDraft: EditorDraftPayload = {
-          documentTitle: data.documentTitle || 'Untitled Document',
+          documentTitle: data.title || 'Untitled Document',
           content: data.content || '',
           htmlContent: data.htmlContent || '',
           pageContents: Array.isArray(data.pageContents) && data.pageContents.length > 0 ? data.pageContents : [data.htmlContent || ''],
+          keystrokeData: Array.isArray(data.keystrokeData) ? data.keystrokeData : [],
+          pastedEvents: Array.isArray(data.pastedEvents) ? data.pastedEvents : [],
           editorPreferences: {
             currentFont: data.editorPreferences?.currentFont || 'Inter',
             currentFontSize: data.editorPreferences?.currentFontSize || '3',
@@ -660,33 +673,28 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
           updatedAt: data.updatedAt || new Date(0).toISOString(),
         };
 
-        const localTime = initialDraft ? new Date(initialDraft.updatedAt).getTime() : 0;
-        const remoteTime = new Date(remoteDraft.updatedAt).getTime();
-        if (!cancelled && remoteTime > localTime) {
-          freshestDraft = remoteDraft;
+        if (!cancelled) {
+          setAnalysis(data.lastAnalysis || null);
           applyDraft(remoteDraft);
-          saveDraftLocally(remoteDraft);
         }
       } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 401) {
-          setServerDraftEnabled(false);
-        }
-      } finally {
-        if (!cancelled && !freshestDraft) {
+        console.error('Document load failed:', error);
+        if (!cancelled) {
           setIsDraftReady(true);
+          setIsDocumentLoaded(true);
         }
       }
     };
 
-    loadDraft();
+    loadEditorState();
 
     return () => {
       cancelled = true;
     };
-  }, [applyDraft, initialDraft, saveDraftLocally]);
+  }, [applyDraft, documentId, initialDraft, isAuthenticated]);
 
   useEffect(() => {
-    if (!isDraftReady) return;
+    if (!isDraftReady || isAuthenticated) return;
 
     const timeoutId = window.setTimeout(() => {
       const draft = getDraftPayload();
@@ -694,19 +702,19 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
     }, 100);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, content, isDraftReady, pageIds, saveDraftLocally, getDraftPayload]);
+  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, content, isAuthenticated, isDraftReady, pageIds, saveDraftLocally, getDraftPayload]);
 
   useEffect(() => {
-    if (!isDraftReady || !serverDraftEnabled) return;
+    if (!isDraftReady || !isDocumentLoaded || !isAuthenticated || !documentId || !hasValidAuthToken()) return;
 
     const timeoutId = window.setTimeout(async () => {
       const draft = getDraftPayload();
       if (draft.updatedAt === lastServerSavedAtRef.current) return;
 
       try {
-        const { data } = await api.put('/sessions/draft', {
+        const { data } = await api.put(`/documents/${documentId}`, {
           content: draft.content,
-          documentTitle: draft.documentTitle,
+          title: draft.documentTitle,
           htmlContent: draft.htmlContent,
           pageContents: draft.pageContents,
           editorPreferences: draft.editorPreferences,
@@ -714,36 +722,28 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
           pastedEvents,
         });
         lastServerSavedAtRef.current = data.updatedAt || draft.updatedAt;
-        saveDraftLocally({
-          ...draft,
-          updatedAt: data.updatedAt || draft.updatedAt,
-        });
       } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 401) {
-          setServerDraftEnabled(false);
-          return;
-        }
-        console.error('Draft autosave failed:', error);
+        console.error('Document autosave failed:', error);
       }
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [content, docTitle, activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, isDraftReady, keystrokeData, pageIds, pastedEvents, getDraftPayload, saveDraftLocally, serverDraftEnabled]);
+  }, [content, currentAlign, currentFont, currentFontSize, currentStyle, activeFormats, documentId, docTitle, getDraftPayload, isAuthenticated, isDocumentLoaded, isDraftReady, keystrokeData, pastedEvents]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!isDraftReady) return;
+      if (!isDraftReady || isAuthenticated) return;
       const draft = getDraftPayload();
       saveDraftLocally(draft);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [getDraftPayload, isDraftReady, saveDraftLocally]);
+  }, [getDraftPayload, isAuthenticated, isDraftReady, saveDraftLocally]);
 
   const handleInput = () => {
     syncContent();
-    saveDraftLocally(getDraftPayload());
+    if (!isAuthenticated) saveDraftLocally(getDraftPayload());
     schedulePagination();
   };
 
@@ -1425,10 +1425,52 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle }) => {
   };
 
   const handleAnalyze = async () => {
+    const draft = getDraftPayload();
+
+    if (!isAuthenticated) {
+      saveDraftLocally(draft);
+      localStorage.setItem(LOCAL_PENDING_ANALYSIS_KEY, '1');
+      navigate('/login', {
+        state: {
+          message: 'You should login first to use Run Analysis. Your draft has been kept and analysis will continue after login.'
+        }
+      });
+      return;
+    }
+
     setIsAnalyzing(true);
-    try { const { data } = await api.post('/sessions', { content: textContent, keystrokeData, pastedEvents }); setAnalysis(data.analysis); }
+    try {
+      if (documentId) {
+        await api.put(`/documents/${documentId}`, {
+          title: draft.documentTitle,
+          content: draft.content,
+          htmlContent: draft.htmlContent,
+          pageContents: draft.pageContents,
+          editorPreferences: draft.editorPreferences,
+          keystrokeData,
+          pastedEvents,
+        });
+      }
+
+      const { data } = await api.post('/sessions', {
+        content: textContent,
+        keystrokeData,
+        pastedEvents,
+        documentId,
+      });
+      setAnalysis(data.analysis);
+      if (documentId) {
+        await api.put(`/documents/${documentId}`, { lastAnalysis: data.analysis });
+      }
+    }
     finally { setIsAnalyzing(false); }
   };
+
+  useEffect(() => {
+    if (!autoRunAnalysis || autoRunAnalysisRef.current || !isDocumentLoaded || !isDraftReady || !isAuthenticated) return;
+    autoRunAnalysisRef.current = true;
+    void handleAnalyze();
+  }, [autoRunAnalysis, isAuthenticated, isDocumentLoaded, isDraftReady]);
 
   return (
     <div className="main-layout">

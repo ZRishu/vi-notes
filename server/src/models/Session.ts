@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const sessionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' },
   content: { type: String, required: true },
   documentTitle: { type: String, default: 'Untitled Document' },
   htmlContent: { type: String, default: '' },

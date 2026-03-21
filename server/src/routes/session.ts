@@ -1,6 +1,7 @@
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import Session from '../models/Session.js';
+import Document from '../models/Document.js';
 import { analyzeSession } from '../utils/analysisEngine.js';
 
 const router = express.Router();
@@ -64,7 +65,7 @@ router.put('/draft', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { content, keystrokeData, pastedEvents } = req.body;
+    const { content, keystrokeData, pastedEvents, documentId } = req.body;
 
     if (typeof content !== 'string') {
       return res.status(400).json({ message: 'Invalid content payload' });
@@ -99,8 +100,26 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Perform AI Behavioral Analysis
     const analysis = analyzeSession(content, sanitizedKeystrokes, sanitizedPastes);
 
+    if (documentId) {
+      const document = await Document.findOne({ _id: documentId, userId: req.userId });
+      if (!document) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+      await Document.updateOne(
+        { _id: documentId, userId: req.userId },
+        {
+          $set: {
+            lastAnalysis: analysis,
+            keystrokeData: sanitizedKeystrokes,
+            pastedEvents: sanitizedPastes
+          }
+        }
+      );
+    }
+
     const session = new Session({
       userId: req.userId,
+      documentId,
       content,
       keystrokeData: sanitizedKeystrokes,
       pastedEvents: sanitizedPastes,
