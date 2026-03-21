@@ -1,0 +1,16 @@
+{
+  "name": "vi-notes",
+  "version": "1.0.0",
+  "description": "Vi-Notes authenticity verification platform",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "install-all": "npm install && npm install --prefix server && npm install --prefix client",
+    "start": "concurrently \"npm start --prefix server\" \"npm run preview --prefix client\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
