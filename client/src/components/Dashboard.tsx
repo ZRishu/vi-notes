@@ -46,7 +46,6 @@ const Dashboard: React.FC = () => {
         <button className="document-card create-document-card" onClick={handleCreateDocument}>
           <div className="create-document-icon"><FilePlus2 size={28} /></div>
           <div className="document-card-title">Create New Document</div>
-          <div className="document-card-preview">Start with a fresh A4 writing page and capture your thoughts.</div>
           <div className="document-card-meta">
             <Clock3 size={14} />
             Ready to start
