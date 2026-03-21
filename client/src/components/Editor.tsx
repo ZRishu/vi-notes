@@ -523,20 +523,6 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     pendingPaginationRef.current = true;
   }, []);
 
-  const normalizePageChildren = (page: HTMLDivElement) => {
-    Array.from(page.childNodes).forEach((child) => {
-      if (child.nodeType === Node.TEXT_NODE) {
-        if ((child.textContent ?? '').trim().length === 0) {
-          page.removeChild(child);
-          return;
-        }
-        const line = document.createElement('div');
-        line.textContent = child.textContent ?? '';
-        page.replaceChild(line, child);
-      }
-    });
-  };
-
   const isPageEmpty = (page: HTMLDivElement) => {
     const clone = page.cloneNode(true) as HTMLDivElement;
     clone.querySelectorAll('br').forEach(br => br.remove());
@@ -573,7 +559,6 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     try {
       for (let index = 0; index < pages.length; index += 1) {
         const page = pages[index];
-        normalizePageChildren(page);
         while (page.scrollHeight > page.clientHeight + 1) {
           if (page.childNodes.length <= 1) break;
           const nextPage = pages[index + 1];
@@ -584,7 +569,6 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
 
           const nodeToMove = page.lastChild;
           if (!nodeToMove) break;
-          normalizePageChildren(nextPage);
           nextPage.insertBefore(nodeToMove, nextPage.firstChild);
         }
       }
