@@ -48,7 +48,7 @@ const Register: React.FC = () => {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h2><UserPlus size={20} /> Create your account</h2>
+        <h2><img src="/logo.svg" alt="Vi-Notes" width="28" height="28" style={{ marginRight: '10px' }} /> Join <span className="brand-font" style={{ fontSize: '32px' }}>Vi-Notes</span></h2>
         <form className="auth-form" onSubmit={handleRegister}>
           <div className="input-group">
             <label htmlFor="register-email">Email</label>
@@ -56,6 +56,7 @@ const Register: React.FC = () => {
               <Mail size={16} />
               <input
                 id="register-email"
+                name="email"
                 className="auth-input"
                 type="email"
                 placeholder="name@example.com"
@@ -72,6 +73,7 @@ const Register: React.FC = () => {
               <Lock size={16} />
               <input
                 id="register-password"
+                name="password"
                 className="auth-input"
                 type="password"
                 placeholder="Choose a secure password"

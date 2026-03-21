@@ -49,13 +49,13 @@ const Login: React.FC = () => {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h2><LogIn size={20} /> Sign in to Vi-Notes</h2>
+        <h2><img src="/logo.svg" alt="Vi-Notes" width="28" height="28" style={{ marginRight: '10px' }} /> Sign in to <span className="brand-font" style={{ fontSize: '32px' }}>Vi-Notes</span></h2>
         <form className="auth-form" onSubmit={handleLogin}>
           <div className="input-group">
             <label htmlFor="email">Email</label>
             <div className="input-with-icon">
               <Mail size={16} />
-              <input id="email" className="auth-input" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <input id="email" name="email" className="auth-input" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
           </div>
 
@@ -63,7 +63,7 @@ const Login: React.FC = () => {
             <label htmlFor="password">Password</label>
             <div className="input-with-icon">
               <Lock size={16} />
-              <input id="password" className="auth-input" type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <input id="password" name="password" className="auth-input" type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
           </div>
 

@@ -46,7 +46,11 @@ const Dashboard: React.FC = () => {
         <button className="document-card create-document-card" onClick={handleCreateDocument}>
           <div className="create-document-icon"><FilePlus2 size={28} /></div>
           <div className="document-card-title">Create New Document</div>
-          <div className="document-card-meta">Start with a fresh A4 writing page.</div>
+          <div className="document-card-preview">Start with a fresh A4 writing page and capture your thoughts.</div>
+          <div className="document-card-meta">
+            <Clock3 size={14} />
+            Ready to start
+          </div>
         </button>
 
         {!isLoading && documents.map((document) => (
@@ -60,7 +64,13 @@ const Dashboard: React.FC = () => {
             <div className="document-card-preview">{document.content?.trim() || 'No content yet.'}</div>
             <div className="document-card-meta">
               <Clock3 size={14} />
-              Updated {new Date(document.updatedAt).toLocaleString()}
+              {new Date(document.updatedAt).toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </div>
           </button>
         ))}

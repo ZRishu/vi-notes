@@ -4,7 +4,7 @@ import Editor from './components/Editor';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
-import { Moon, Sun, LogOut, ShieldCheck, LogIn } from 'lucide-react';
+import { Moon, Sun, LogOut, LogIn } from 'lucide-react';
 import { hasValidAuthToken } from './api';
 import './App.css';
 
@@ -95,12 +95,12 @@ const AppShell = () => {
       <div className="compatibility-screen">
         <div className="compatibility-card">
           <div className="doc-icon">
-            <ShieldCheck size={22} />
+            <img src="/logo.svg" alt="Vi-Notes" width="22" height="22" />
           </div>
           <h1>Screen Size Not Supported</h1>
           <p>
             This editor is designed for larger screens. A minimum width of 768 pixels is required
-            to use Vi-Notes reliably.
+            to use <span className="brand-font">Vi-Notes</span> reliably.
           </p>
           <p>
             Open the site on a tablet in landscape mode, laptop, or desktop browser to continue
@@ -115,11 +115,11 @@ const AppShell = () => {
     <div className="App">
       <header>
         <div className="header-left">
-          <Link to={isLoggedIn ? '/' : '/'} className="brand-link">
+          <Link to="/" className="brand-link">
             <div className="doc-icon">
-              <ShieldCheck size={20} />
+              <img src="/logo.svg" alt="Vi-Notes" width="24" height="24" />
             </div>
-            <span className="brand-title">Vi-Notes</span>
+            <span className="brand-title brand-font">Vi-Notes</span>
           </Link>
 
           {isEditorRoute && (
