@@ -1850,7 +1850,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
         <div className="sidebar-section" style={{ flex: 1 }}>
           <div className="sidebar-title"><ShieldAlert size={14} /> Authenticity Check</div>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>Run the AI analysis to verify if the writing patterns match genuine human behavior.</p>
-          <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', gap: '8px' }} onClick={handleAnalyze} disabled={isAnalyzing || textContent.length === 0}><Activity size={16} />{isAnalyzing ? 'Analyzing...' : 'Run Analysis'}</button>
+          <button className="btn-analysis" style={{ width: '100%' }} onClick={handleAnalyze} disabled={isAnalyzing || textContent.length === 0}><Activity size={16} />{isAnalyzing ? 'Analyzing...' : 'Run Analysis'}</button>
           {analysis && (
             <div className="report-card">
               <div className="score-display">
