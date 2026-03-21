@@ -12,8 +12,23 @@ const sessionSchema = new mongoose.Schema({
   pastedEvents: [{
     timestamp: { type: Number },
     textLength: { type: Number },
-    content: { type: String } // "amount of text pasted" - maybe just length but I'll store it as per requirement if needed. Actually it says "record that event and the amount of text pasted". I'll store length.
-  }]
+  }],
+  analysis: {
+    authenticityScore: { type: Number },
+    typingSpeed: { type: Number }, // characters per minute
+    speedVariance: { type: Number },
+    pauseCount: { type: Number },
+    microPauseCount: { type: Number },
+    punctuationPauseCount: { type: Number },
+    revisionCount: { type: Number },
+    revisionRate: { type: Number },
+    wordCount: { type: Number },
+    vocabularyDiversity: { type: Number },
+    sentenceLengthVariance: { type: Number },
+    isPasted: { type: Boolean },
+    suspiciousFlags: [{ type: String }],
+    recommendation: { type: String }
+  }
 }, { timestamps: true });
 
 export default mongoose.model('Session', sessionSchema);

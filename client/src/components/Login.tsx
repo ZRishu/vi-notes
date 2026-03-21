@@ -15,7 +15,7 @@ const Login: React.FC = () => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.userId);
       navigate('/');
-    } catch (err) {
+    } catch {
       setError('Invalid credentials');
     }
   };
