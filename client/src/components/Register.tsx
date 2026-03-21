@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
+import { UserPlus, Mail, Lock, LogIn } from 'lucide-react';
 
 const Register: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -20,15 +21,52 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="auth-container">
-      <h2>Register</h2>
-      <form onSubmit={handleRegister}>
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        <button type="submit">Register</button>
-      </form>
-      {message && <p>{message}</p>}
-      <p>Already have an account? <span className="link" onClick={() => navigate('/login')}>Login</span></p>
+    <div className="auth-page">
+      <div className="auth-card">
+        <h2><UserPlus size={20} /> Create your account</h2>
+        <form className="auth-form" onSubmit={handleRegister}>
+          <div className="input-group">
+            <label htmlFor="register-email">Email</label>
+            <div className="input-with-icon">
+              <Mail size={16} />
+              <input
+                id="register-email"
+                className="auth-input"
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="register-password">Password</label>
+            <div className="input-with-icon">
+              <Lock size={16} />
+              <input
+                id="register-password"
+                className="auth-input"
+                type="password"
+                placeholder="Choose a secure password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <button className="btn-primary auth-submit" type="submit"><UserPlus size={16} /> Register</button>
+        </form>
+        {message && <p className="auth-feedback">{message}</p>}
+        <p className="auth-footer">
+          Already have an account?{' '}
+          <span className="auth-link-btn" onClick={() => navigate('/login')}>
+            <LogIn size={14} /> Login
+          </span>
+        </p>
+      </div>
     </div>
   );
 };

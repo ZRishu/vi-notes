@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
+import { LogIn, Mail, Lock, UserPlus } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -21,15 +22,36 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="auth-container">
-      <h2>Login</h2>
-      <form onSubmit={handleLogin}>
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        <button type="submit">Login</button>
-      </form>
-      {error && <p>{error}</p>}
-      <p>Don't have an account? <span className="link" onClick={() => navigate('/register')}>Register</span></p>
+    <div className="auth-page">
+      <div className="auth-card">
+        <h2><LogIn size={20} /> Sign in to Vi-Notes</h2>
+        <form className="auth-form" onSubmit={handleLogin}>
+          <div className="input-group">
+            <label htmlFor="email">Email</label>
+            <div className="input-with-icon">
+              <Mail size={16} />
+              <input id="email" className="auth-input" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="password">Password</label>
+            <div className="input-with-icon">
+              <Lock size={16} />
+              <input id="password" className="auth-input" type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+          </div>
+
+          <button className="btn-primary auth-submit" type="submit"><LogIn size={16} /> Sign In</button>
+        </form>
+        {error && <p className="auth-feedback error-text">{error}</p>}
+        <p className="auth-footer">
+          Don't have an account?{' '}
+          <span className="auth-link-btn" onClick={() => navigate('/register')}>
+            <UserPlus size={14} /> Register
+          </span>
+        </p>
+      </div>
     </div>
   );
 };

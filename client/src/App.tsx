@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-ro
 import Editor from './components/Editor';
 import Login from './components/Login';
 import Register from './components/Register';
-import { Moon, Sun, LogOut, ShieldCheck } from 'lucide-react';
+import { Moon, Sun, LogOut, ShieldCheck, LogIn } from 'lucide-react';
 import './App.css';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -12,11 +12,18 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme;
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [docTitle, setDocTitle] = useState('Untitled Document');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -36,14 +43,14 @@ function App() {
       <div className="App">
         <header>
           <div className="header-left">
-            <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '12px', marginRight: '8px' }}>
+            <Link to="/" className="brand-link">
               <div className="doc-icon">
                 <ShieldCheck size={20} />
               </div>
-              <span style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>Vi-Notes</span>
+              <span className="brand-title">Vi-Notes</span>
             </Link>
             
-            <div style={{ height: '20px', width: '1px', backgroundColor: 'var(--border-color)', margin: '0 8px' }}></div>
+            <div className="header-divider"></div>
             
             <div className="title-input-wrapper" data-replicated-value={docTitle}>
               <input 
@@ -65,8 +72,8 @@ function App() {
                 <LogOut size={20} />
               </button>
             ) : (
-              <Link to="/login" style={{ textDecoration: 'none' }}>
-                <button className="btn-primary">Sign In</button>
+              <Link to="/login" className="header-auth-link">
+                <button className="btn-primary"><LogIn size={16} /> Sign In</button>
               </Link>
             )}
           </div>
@@ -89,4 +96,3 @@ function App() {
 }
 
 export default App;
-
