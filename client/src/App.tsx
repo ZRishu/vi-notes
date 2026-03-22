@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation, us
 import Editor from './components/Editor';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
-import { Moon, Sun, LogOut, LogIn, LayoutDashboard, Save, Trash2 } from 'lucide-react';
+import { Moon, Sun, LogOut, LogIn, LayoutDashboard, Save, Trash2, LoaderCircle } from 'lucide-react';
 import { hasValidAuthToken } from './api';
 import './App.css';
 
@@ -14,6 +14,7 @@ interface EditorActions {
   save: () => void;
   delete: () => void;
   saveStatus: string;
+  analyzeBeforeExit: () => Promise<void>;
 }
 
 const ProtectedRoute = ({ children, onAuthRequired }: { children: React.ReactNode, onAuthRequired: (msg?: string) => void }) => {
@@ -43,6 +44,7 @@ const AppShell = () => {
   const [authModalMessage, setAuthModalMessage] = useState<string | null>(null);
   const [editorActions, setEditorActions] = useState<EditorActions | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(hasValidAuthToken());
+  const [isNavigatingDashboard, setIsNavigatingDashboard] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -72,9 +74,19 @@ const AppShell = () => {
     setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
   };
 
-  const handleGoToDashboard = () => {
+  const handleGoToDashboard = async () => {
+    if (isNavigatingDashboard) return;
+    setIsNavigatingDashboard(true);
+    if (editorActions) {
+      try {
+        await editorActions.analyzeBeforeExit();
+      } catch (error) {
+        console.error('Dashboard exit analysis failed:', error);
+      }
+    }
     setEditorActions(null);
     navigate('/');
+    setIsNavigatingDashboard(false);
   };
 
   const handleLogout = () => {
@@ -168,9 +180,10 @@ const AppShell = () => {
                 className="header-action-btn"
                 title="Go back to Dashboard"
                 onClick={handleGoToDashboard}
+                disabled={isNavigatingDashboard}
               >
-                <LayoutDashboard size={18} />
-                <span className="header-action-label">Dashboard</span>
+                {isNavigatingDashboard ? <LoaderCircle size={18} className="spin-icon" /> : <LayoutDashboard size={18} />}
+                <span className="header-action-label">{isNavigatingDashboard ? 'Generating Report...' : 'Dashboard'}</span>
               </button>
               {editorActions && (
                 <>

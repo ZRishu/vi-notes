@@ -3,12 +3,13 @@ import api, { hasValidAuthToken } from '../api';
 import TurndownService from 'turndown';
 import { useNavigate } from 'react-router-dom';
 import katex from 'katex';
+import { downloadReportPdf } from '../utils/reportExport';
 import { 
   Undo, Redo, 
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight,
   List, ListOrdered, Link2,
-  Activity, CheckCircle2, ShieldAlert, ChevronDown,
+  Activity, ShieldAlert, ChevronDown, PanelRightOpen, PanelRightClose, FileSearch,
   Quote, Code, Image as ImageIcon, Minus, Plus, Share,
   FileText, FileDown, Keyboard, Printer, Sigma, Palette, Type, Highlighter,
   X, AlertTriangle
@@ -28,6 +29,9 @@ interface PastedEvent {
 }
 
 interface AnalysisResult {
+  reportId: string;
+  verificationTag: string;
+  generatedAt: string;
   authenticityScore: number;
   typingSpeed: number;
   speedVariance: number;
@@ -36,11 +40,19 @@ interface AnalysisResult {
   punctuationPauseCount: number;
   revisionCount: number;
   revisionRate: number;
+  burstCount: number;
+  averagePauseMs: number;
+  hesitationScore: number;
+  rhythmScore: number;
+  consistencyMismatchScore: number;
   wordCount: number;
   vocabularyDiversity: number;
   sentenceLengthVariance: number;
   isPasted: boolean;
   suspiciousFlags: string[];
+  supportingEvidence: string[];
+  behaviorSummary: string[];
+  linguisticSummary: string[];
   recommendation: string;
 }
 
@@ -79,10 +91,47 @@ interface EditorProps {
   setDocTitle: React.Dispatch<React.SetStateAction<string>>;
   isAuthenticated: boolean;
   onAuthRequired?: (msg?: string) => void;
-  onActionsReady?: (actions: { save: () => void; delete: () => void; saveStatus: string } | null) => void;
+  onActionsReady?: (actions: { save: () => void; delete: () => void; saveStatus: string; analyzeBeforeExit: () => Promise<void> } | null) => void;
   documentId?: string | null;
   autoRunAnalysis?: boolean;
 }
+
+const normalizeAnalysisResult = (analysis: AnalysisResult | null | undefined): AnalysisResult | null => {
+  if (!analysis) return null;
+  return {
+    reportId: analysis.reportId || 'legacy-report',
+    verificationTag: analysis.verificationTag || 'Verified by Vi-Notes',
+    generatedAt: analysis.generatedAt || new Date().toISOString(),
+    authenticityScore: analysis.authenticityScore ?? 0,
+    typingSpeed: analysis.typingSpeed ?? 0,
+    speedVariance: analysis.speedVariance ?? 0,
+    pauseCount: analysis.pauseCount ?? 0,
+    microPauseCount: analysis.microPauseCount ?? 0,
+    punctuationPauseCount: analysis.punctuationPauseCount ?? 0,
+    revisionCount: analysis.revisionCount ?? 0,
+    revisionRate: analysis.revisionRate ?? 0,
+    burstCount: analysis.burstCount ?? 0,
+    averagePauseMs: analysis.averagePauseMs ?? 0,
+    hesitationScore: analysis.hesitationScore ?? 0,
+    rhythmScore: analysis.rhythmScore ?? 0,
+    consistencyMismatchScore: analysis.consistencyMismatchScore ?? 0,
+    wordCount: analysis.wordCount ?? 0,
+    vocabularyDiversity: analysis.vocabularyDiversity ?? 0,
+    sentenceLengthVariance: analysis.sentenceLengthVariance ?? 0,
+    isPasted: analysis.isPasted ?? false,
+    suspiciousFlags: analysis.suspiciousFlags || [],
+    supportingEvidence: analysis.supportingEvidence || [],
+    behaviorSummary: analysis.behaviorSummary || [],
+    linguisticSummary: analysis.linguisticSummary || [],
+    recommendation: analysis.recommendation || 'Authenticity Verified',
+  };
+};
+
+const getConfidenceToneClass = (score: number): string => {
+  if (score >= 80) return 'confidence-high';
+  if (score >= 55) return 'confidence-medium';
+  return 'confidence-low';
+};
 
 const readStoredDraft = (storageKey: string): EditorDraftPayload | null => {
   const rawDraft = localStorage.getItem(storageKey);
@@ -365,7 +414,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     Array.isArray(initialDraft?.pastedEvents) ? initialDraft.pastedEvents : []
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => initialDraft?.analysis || null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => normalizeAnalysisResult(initialDraft?.analysis));
   
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false);
@@ -378,6 +427,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
   const [showImageModal, setShowImageModal] = useState(false);
   const [showMathModal, setShowMathModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showAnalysisReport, setShowAnalysisReport] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isDraftReady, setIsDraftReady] = useState(false);
   const [isDocumentLoaded, setIsDocumentLoaded] = useState(() => !isAuthenticated);
   
@@ -431,7 +482,6 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
   
   const textContent = content.replace(/<[^>]*>?/gm, '');
   const wordCount = textContent.trim().split(/\s+/).filter(w => w.length > 0).length;
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -525,7 +575,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     setCurrentAlign(draft.editorPreferences.currentAlign || 'Left');
     setKeystrokeData(Array.isArray(draft.keystrokeData) ? draft.keystrokeData : []);
     setPastedEvents(Array.isArray(draft.pastedEvents) ? draft.pastedEvents : []);
-    setAnalysis(draft.analysis || null);
+    setAnalysis(normalizeAnalysisResult(draft.analysis));
     setActiveFormats(draft.editorPreferences.activeFormats || {
       bold: false,
       italic: false,
@@ -666,7 +716,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           pageContents: Array.isArray(data.pageContents) && data.pageContents.length > 0 ? data.pageContents : [data.htmlContent || ''],
           keystrokeData: Array.isArray(data.keystrokeData) ? data.keystrokeData : [],
           pastedEvents: Array.isArray(data.pastedEvents) ? data.pastedEvents : [],
-          analysis: data.lastAnalysis || null,
+          analysis: normalizeAnalysisResult(data.lastAnalysis),
           editorPreferences: {
             currentFont: data.editorPreferences?.currentFont || 'Inter',
             currentFontSize: data.editorPreferences?.currentFontSize || '3',
@@ -1578,6 +1628,19 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     setShowExportDropdown(false);
   };
 
+  const handleDownloadReportPdf = useCallback(async () => {
+    if (!analysis) return;
+    try {
+      await downloadReportPdf({
+        title: docTitle || 'Authenticity Report',
+        report: analysis,
+      });
+    } catch (error) {
+      console.error('Failed to export report PDF:', error);
+      alert('Failed to download report PDF. Please try again.');
+    }
+  }, [analysis, docTitle]);
+
   const handleManualSave = useCallback(async () => {
     if (!isAuthenticated || !documentId) return;
     setSaveStatus('saving');
@@ -1622,7 +1685,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     }
   }, [documentId, draftStorageKey, isAuthenticated, navigate]);
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!textContent.trim()) return;
     const draft = getDraftPayload();
 
     if (!isAuthenticated) {
@@ -1653,19 +1717,20 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
         pastedEvents,
         documentId,
       });
-      setAnalysis(data.analysis);
+      setAnalysis(normalizeAnalysisResult(data.analysis));
+      if (!silent) setShowAnalysisReport(true);
       if (documentId) {
         await api.put(`/documents/${documentId}`, { lastAnalysis: data.analysis });
       }
     }
     finally { setIsAnalyzing(false); }
-  };
+  }, [documentId, getDraftPayload, isAuthenticated, keystrokeData, onAuthRequired, pastedEvents, saveDraftLocally, textContent]);
 
   useEffect(() => {
     if (!autoRunAnalysis || autoRunAnalysisRef.current || !isDocumentLoaded || !isDraftReady || !isAuthenticated) return;
     autoRunAnalysisRef.current = true;
-    void handleAnalyze();
-  }, [autoRunAnalysis, isAuthenticated, isDocumentLoaded, isDraftReady]);
+    void handleAnalyze({ silent: false });
+  }, [autoRunAnalysis, handleAnalyze, isAuthenticated, isDocumentLoaded, isDraftReady]);
 
   useEffect(() => {
     if (onActionsReady) {
@@ -1673,7 +1738,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
         onActionsReady({
           save: handleManualSave,
           delete: handleOpenDeleteModal,
-          saveStatus
+          saveStatus,
+          analyzeBeforeExit: () => handleAnalyze({ silent: true })
         });
       } else {
         onActionsReady(null);
@@ -1682,7 +1748,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     return () => {
       if (onActionsReady) onActionsReady(null);
     };
-  }, [documentId, handleManualSave, handleOpenDeleteModal, isAuthenticated, onActionsReady, saveStatus]);
+  }, [documentId, handleAnalyze, handleManualSave, handleOpenDeleteModal, isAuthenticated, onActionsReady, saveStatus]);
 
   return (
     <div className="main-layout">
@@ -2088,52 +2154,161 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           </div>
         </div>
       )}
+      {showAnalysisReport && analysis && (
+        <div className="modal-overlay" onClick={() => setShowAnalysisReport(false)}>
+          <div className="modal-content report-modal" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const confidenceToneClass = getConfidenceToneClass(analysis.authenticityScore);
+              return (
+                <>
+            <div className="report-modal-header">
+              <div>
+                <div className="report-badge">{analysis.verificationTag}</div>
+                <h3>Authenticity Report</h3>
+                <div className="report-meta-row">
+                  <p>Report ID: {analysis.reportId}</p>
+                  <p>Generated {new Date(analysis.generatedAt).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="report-header-actions">
+                <button type="button" className="report-header-btn report-download-btn" onClick={() => void handleDownloadReportPdf()}>
+                  <FileDown size={16} />
+                  Download
+                </button>
+                <button type="button" className="report-header-btn report-close-header-btn" onClick={() => setShowAnalysisReport(false)}>
+                  <X size={16} />
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="report-modal-body">
+              <div className="report-summary-grid">
+                <div className={`report-summary-card report-summary-card-primary ${confidenceToneClass}`}>
+                  <div className="report-summary-label">Confidence Score</div>
+                  <div className={`report-summary-value ${confidenceToneClass}`}>{analysis.authenticityScore}</div>
+                  <div className="report-summary-note">{analysis.recommendation}</div>
+                </div>
+                <div className="report-summary-card report-summary-card-rhythm">
+                  <div className="report-summary-label">Behavior Rhythm</div>
+                  <div className="report-summary-value">{analysis.rhythmScore}</div>
+                  <div className="report-summary-note">{analysis.typingSpeed} CPM and {analysis.pauseCount} long pauses</div>
+                </div>
+                <div className="report-summary-card report-summary-card-linguistic">
+                  <div className="report-summary-label">Linguistic Match</div>
+                  <div className="report-summary-value">{100 - analysis.consistencyMismatchScore}</div>
+                  <div className="report-summary-note">{analysis.vocabularyDiversity} vocabulary diversity</div>
+                </div>
+              </div>
 
-      <aside className="sidebar">
-        <div className="sidebar-section">
-          <div className="sidebar-title"><Keyboard size={14} /> Session Stats</div>
-          <div className="stats-container">
-            <div className="stat-box"><span className="stat-value">{wordCount}</span><span className="stat-label">Words</span></div>
-            <div className="stat-box"><span className="stat-value">{keystrokeData.length}</span><span className="stat-label">Keystrokes</span></div>
-            <div className="stat-box"><span className="stat-value">{pastedEvents.length}</span><span className="stat-label">Paste Events</span></div>
-            <div className="stat-box"><span className="stat-value">{Math.round(keystrokeData.length / 5)}</span><span className="stat-label">Est. Time (s)</span></div>
+              <div className="report-layout">
+                <div className="report-main-column">
+                  <div className="report-section">
+                    <div className="report-section-title">Behavioral Monitoring</div>
+                    <ul className="report-list">
+                      {analysis.behaviorSummary.map((item, index) => <li key={index}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div className="report-section">
+                    <div className="report-section-title">Linguistic Analysis</div>
+                    <ul className="report-list">
+                      {analysis.linguisticSummary.map((item, index) => <li key={index}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div className="report-section">
+                    <div className="report-section-title">Supporting Evidence</div>
+                    <ul className="report-list">
+                      {(analysis.supportingEvidence.length > 0 ? analysis.supportingEvidence : ['No suspicious evidence detected in this session.']).map((item, index) => <li key={index}>{item}</li>)}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="report-side-column">
+                  <div className="report-side-card">
+                    <div className="report-section-title">Key Metrics</div>
+                    <div className="report-metrics-grid">
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Micro-pauses</span>
+                        <strong>{analysis.microPauseCount}</strong>
+                      </div>
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Punctuation pauses</span>
+                        <strong>{analysis.punctuationPauseCount}</strong>
+                      </div>
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Revisions</span>
+                        <strong>{analysis.revisionCount}</strong>
+                      </div>
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Burst sequences</span>
+                        <strong>{analysis.burstCount}</strong>
+                      </div>
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Average pause</span>
+                        <strong>{analysis.averagePauseMs} ms</strong>
+                      </div>
+                      <div className="metric-chip">
+                        <span className="metric-chip-label">Hesitation score</span>
+                        <strong>{analysis.hesitationScore}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+                </>
+              );
+            })()}
           </div>
         </div>
-        <div className="sidebar-section" style={{ flex: 1 }}>
-          <div className="sidebar-title"><ShieldAlert size={14} /> Authenticity Check</div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>Run the AI analysis to verify if the writing patterns match genuine human behavior.</p>
-          <button className="btn-analysis" style={{ width: '100%' }} onClick={handleAnalyze} disabled={isAnalyzing || textContent.length === 0}><Activity size={16} />{isAnalyzing ? 'Analyzing...' : 'Run Analysis'}</button>
-          {analysis && (
-            <div className="report-card">
-              <div className="score-display">
-                <div className={`score-circle ${analysis.authenticityScore > 80 ? 'high' : analysis.authenticityScore > 50 ? 'medium' : 'low'}`}>{analysis.authenticityScore}</div>
-                <div>
-                  <div style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Confidence</div>
-                  <div className="report-recommendation" style={{ margin: 0 }}>{analysis.recommendation}</div>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '16px 0', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Speed</div>
-                  <div style={{ fontWeight: 600 }}>{analysis.typingSpeed} <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>CPM</span></div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Pauses</div>
-                  <div style={{ fontWeight: 600 }}>{analysis.pauseCount}</div>
-                </div>
-              </div>
-              {analysis.suspiciousFlags.length > 0 ? (
-                <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--warning-color)', marginBottom: '8px' }}>Flags Detected</div>
-                  <ul className="flags-list">{analysis.suspiciousFlags.map((flag: string, i: number) => <li key={i}>{flag}</li>)}</ul>
-                </div>
-              ) : (
-                <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success-color)' }}>
-                  <CheckCircle2 size={16} /><span style={{ fontSize: '13px', fontWeight: 500 }}>No suspicious patterns found.</span>
-                </div>
-              )}
+      )}
+
+      <aside className={`sidebar ${isSidebarExpanded ? 'expanded' : 'collapsed'}`}>
+        <div className="sidebar-rail">
+          <button
+            className="sidebar-icon-btn"
+            onClick={() => setIsSidebarExpanded((prev) => !prev)}
+            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {isSidebarExpanded ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+          </button>
+          <button
+            className={`sidebar-icon-btn sidebar-icon-transition sidebar-icon-btn-primary ${isSidebarExpanded ? 'is-hidden' : ''}`}
+            onClick={() => void handleAnalyze()}
+            disabled={isAnalyzing || textContent.length === 0}
+            title={isAnalyzing ? 'Generating report' : 'Run analysis'}
+            aria-label={isAnalyzing ? 'Generating report' : 'Run analysis'}
+          >
+            <Activity size={18} />
+          </button>
+          <button
+            className={`sidebar-icon-btn sidebar-icon-transition ${isSidebarExpanded ? 'is-hidden' : ''}`}
+            onClick={() => setShowAnalysisReport(true)}
+            disabled={!analysis}
+            title="View latest report"
+            aria-label="View latest report"
+          >
+            <FileSearch size={18} />
+          </button>
+        </div>
+        <div className="sidebar-content">
+          <div className="sidebar-section">
+            <div className="sidebar-title"><Keyboard size={14} /> Session Stats</div>
+            <div className="stats-container">
+              <div className="stat-box"><span className="stat-value">{wordCount}</span><span className="stat-label">Words</span></div>
+              <div className="stat-box"><span className="stat-value">{keystrokeData.length}</span><span className="stat-label">Keystrokes</span></div>
+              <div className="stat-box"><span className="stat-value">{pastedEvents.length}</span><span className="stat-label">Paste Events</span></div>
+              <div className="stat-box"><span className="stat-value">{Math.round(keystrokeData.length / 5)}</span><span className="stat-label">Est. Time (s)</span></div>
             </div>
-          )}
+          </div>
+          <div className="sidebar-section" style={{ flex: 1 }}>
+            <div className="sidebar-title"><ShieldAlert size={14} /> Authenticity Check</div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>Run the AI analysis to verify if the writing patterns match genuine human behavior.</p>
+            <button className="btn-analysis" style={{ width: '100%' }} onClick={() => void handleAnalyze()} disabled={isAnalyzing || textContent.length === 0}><Activity size={16} />{isAnalyzing ? 'Generating Report...' : 'Run Analysis'}</button>
+            <button className="btn-secondary report-open-btn" onClick={() => setShowAnalysisReport(true)} disabled={!analysis} style={{ width: '100%' }}>
+              View Latest Report
+            </button>
+          </div>
         </div>
       </aside>
     </div>

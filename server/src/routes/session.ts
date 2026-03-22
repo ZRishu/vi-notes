@@ -2,7 +2,7 @@ import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import Session from '../models/Session.js';
 import Document from '../models/Document.js';
-import { analyzeSession } from '../utils/analysisEngine.js';
+import { analyzeSession, KeystrokeData, PastedEvent } from '../utils/analysisEngine.js';
 
 const router = express.Router();
 
@@ -63,6 +63,83 @@ router.put('/draft', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
+router.post('/documents/:id/report', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const document = await Document.findOne({ _id: req.params.id, userId: req.userId });
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    const sanitizedKeystrokes = Array.isArray(document.keystrokeData)
+      ? document.keystrokeData
+          .filter(
+            (item) =>
+              item &&
+              (item.type === 'keydown' || item.type === 'keyup') &&
+              typeof item.keyCode === 'string' &&
+              typeof item.timestamp === 'number'
+          )
+          .map((item): KeystrokeData => ({
+            type: item.type === 'keyup' ? 'keyup' : 'keydown',
+            keyCode: item.keyCode ?? '',
+            timestamp: item.timestamp ?? 0,
+            duration: typeof item.duration === 'number' ? item.duration : undefined
+          }))
+      : [];
+    const sanitizedPastes = Array.isArray(document.pastedEvents)
+      ? document.pastedEvents
+          .filter((item) => item && typeof item.timestamp === 'number' && typeof item.textLength === 'number')
+          .map((item): PastedEvent => ({
+            timestamp: item.timestamp ?? 0,
+            textLength: item.textLength ?? 0
+          }))
+      : [];
+    const content = typeof document.content === 'string' ? document.content : '';
+
+    const analysis = analyzeSession(content, sanitizedKeystrokes, sanitizedPastes);
+
+    await Document.updateOne(
+      { _id: document._id, userId: req.userId },
+      {
+        $set: {
+          lastAnalysis: analysis
+        }
+      }
+    );
+
+    const session = await Session.findOneAndUpdate(
+      {
+        userId: req.userId,
+        documentId: document._id,
+        isDraft: false
+      },
+      {
+        userId: req.userId,
+        documentId: document._id,
+        isDraft: false,
+        content,
+        documentTitle: document.title,
+        htmlContent: document.htmlContent,
+        pageContents: document.pageContents,
+        editorPreferences: document.editorPreferences,
+        keystrokeData: sanitizedKeystrokes,
+        pastedEvents: sanitizedPastes,
+        analysis
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(201).json({
+      documentId: document._id,
+      analysis,
+      session
+    });
+  } catch (error) {
+    console.error('Document report generation error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { content, keystrokeData, pastedEvents, documentId } = req.body;
@@ -117,16 +194,24 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       );
     }
 
-    const session = new Session({
-      userId: req.userId,
-      documentId,
-      content,
-      keystrokeData: sanitizedKeystrokes,
-      pastedEvents: sanitizedPastes,
-      analysis
-    });
-    
-    await session.save();
+    const session = await Session.findOneAndUpdate(
+      {
+        userId: req.userId,
+        documentId: documentId || null,
+        isDraft: false
+      },
+      {
+        userId: req.userId,
+        documentId: documentId || null,
+        isDraft: false,
+        content,
+        keystrokeData: sanitizedKeystrokes,
+        pastedEvents: sanitizedPastes,
+        analysis
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
     res.status(201).json(session);
   } catch (error) {
     console.error('Session save error:', error);

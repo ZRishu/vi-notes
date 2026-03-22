@@ -35,6 +35,9 @@ const sessionSchema = new mongoose.Schema({
     textLength: { type: Number },
   }],
   analysis: {
+    reportId: { type: String },
+    verificationTag: { type: String },
+    generatedAt: { type: Date },
     authenticityScore: { type: Number },
     typingSpeed: { type: Number }, // characters per minute
     speedVariance: { type: Number },
@@ -43,11 +46,19 @@ const sessionSchema = new mongoose.Schema({
     punctuationPauseCount: { type: Number },
     revisionCount: { type: Number },
     revisionRate: { type: Number },
+    burstCount: { type: Number },
+    averagePauseMs: { type: Number },
+    hesitationScore: { type: Number },
+    rhythmScore: { type: Number },
+    consistencyMismatchScore: { type: Number },
     wordCount: { type: Number },
     vocabularyDiversity: { type: Number },
     sentenceLengthVariance: { type: Number },
     isPasted: { type: Boolean },
     suspiciousFlags: [{ type: String }],
+    supportingEvidence: [{ type: String }],
+    behaviorSummary: [{ type: String }],
+    linguisticSummary: [{ type: String }],
     recommendation: { type: String }
   }
 }, { timestamps: true });
