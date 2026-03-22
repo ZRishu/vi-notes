@@ -16,12 +16,28 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
+    const storedName = localStorage.getItem('userName');
+    if (storedName) {
+      setUserName(storedName);
+    }
+
     const loadDocuments = async () => {
       try {
-        const { data } = await api.get('/documents');
-        setDocuments(data);
+        const [{ data: docs }, { data: user }] = await Promise.all([
+          api.get('/documents'),
+          !storedName ? api.get('/auth/me') : Promise.resolve({ data: { name: storedName } })
+        ]);
+        
+        setDocuments(docs);
+        if (user && user.name) {
+          setUserName(user.name);
+          localStorage.setItem('userName', user.name);
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
       } finally {
         setIsLoading(false);
       }
@@ -61,7 +77,7 @@ const Dashboard: React.FC = () => {
     <div className="dashboard-page">
       <div className="dashboard-header">
         <div>
-          <h1>Your Documents</h1>
+          <h1>Hello, {userName.trim() || 'Writer'}!</h1>
           <p>Create a new document or pick up where you left off.</p>
         </div>
       </div>

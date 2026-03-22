@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api, { hasValidAuthToken } from '../api';
 import TurndownService from 'turndown';
 import { useNavigate } from 'react-router-dom';
+import katex from 'katex';
 import { 
   Undo, Redo, 
   Bold, Italic, Underline, Strikethrough,
@@ -9,7 +10,8 @@ import {
   List, ListOrdered, Link2,
   Activity, CheckCircle2, ShieldAlert, ChevronDown,
   Quote, Code, Image as ImageIcon, Minus, Plus, Share,
-  FileText, FileDown, Keyboard, Printer, Sigma, Palette, Type, Highlighter
+  FileText, FileDown, Keyboard, Printer, Sigma, Palette, Type, Highlighter,
+  X, AlertTriangle
 } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 
@@ -54,12 +56,14 @@ interface ActiveFormatsState {
 }
 
 interface EditorDraftPayload {
+  documentId?: string | null;
   documentTitle: string;
   content: string;
   htmlContent: string;
   pageContents: string[];
   keystrokeData: KeystrokeEvent[];
   pastedEvents: PastedEvent[];
+  analysis: AnalysisResult | null;
   editorPreferences: {
     currentFont: string;
     currentFontSize: string;
@@ -74,13 +78,14 @@ interface EditorProps {
   docTitle: string;
   setDocTitle: React.Dispatch<React.SetStateAction<string>>;
   isAuthenticated: boolean;
-  onAuthRequired?: () => void;
+  onAuthRequired?: (msg?: string) => void;
+  onActionsReady?: (actions: { save: () => void; delete: () => void; saveStatus: string } | null) => void;
   documentId?: string | null;
   autoRunAnalysis?: boolean;
 }
 
-const readLocalDraft = (): EditorDraftPayload | null => {
-  const rawDraft = localStorage.getItem(LOCAL_DRAFT_KEY);
+const readStoredDraft = (storageKey: string): EditorDraftPayload | null => {
+  const rawDraft = localStorage.getItem(storageKey);
   if (!rawDraft) return null;
   try {
     return JSON.parse(rawDraft) as EditorDraftPayload;
@@ -309,6 +314,14 @@ const DEFAULT_COLORS = [
 const LOCAL_DRAFT_KEY = 'vi-notes-editor-draft';
 const LOCAL_PENDING_ANALYSIS_KEY = 'vi-notes-pending-analysis';
 
+const getDraftStorageKey = (documentId: string | null, isAuthenticated: boolean) =>
+  isAuthenticated && documentId ? `${LOCAL_DRAFT_KEY}:${documentId}` : LOCAL_DRAFT_KEY;
+
+const getDraftTimestamp = (draft: EditorDraftPayload | null) => {
+  const timestamp = draft?.updatedAt ? Date.parse(draft.updatedAt) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
 const getContrastColor = (hex: string) => {
   const { r, g, b } = hexToRgb(hex);
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
@@ -330,9 +343,14 @@ const getClosestFontSizeValue = (fontSizePx: number) => {
   ).value;
 };
 
-const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated, onAuthRequired, documentId = null, autoRunAnalysis = false }) => {
+const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated, onAuthRequired, onActionsReady, documentId = null, autoRunAnalysis = false }) => {
   const navigate = useNavigate();
-  const initialDraftRef = useRef<EditorDraftPayload | null>(isAuthenticated ? null : readLocalDraft());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const draftStorageKey = getDraftStorageKey(documentId, isAuthenticated);
+  const initialDraftRef = useRef<EditorDraftPayload | null>(readStoredDraft(draftStorageKey));
+  const hydratedServerTimestampRef = useRef('');
   const initialDraft = initialDraftRef.current;
   const [content, setContent] = useState(() => initialDraft?.htmlContent || '');
   const [pageIds, setPageIds] = useState(() =>
@@ -340,10 +358,14 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
       ? initialDraft.pageContents.map((_, index) => `page-initial-${index + 1}`)
       : ['page-1']
   );
-  const [keystrokeData, setKeystrokeData] = useState<KeystrokeEvent[]>([]);
-  const [pastedEvents, setPastedEvents] = useState<PastedEvent[]>([]);
+  const [keystrokeData, setKeystrokeData] = useState<KeystrokeEvent[]>(() =>
+    Array.isArray(initialDraft?.keystrokeData) ? initialDraft.keystrokeData : []
+  );
+  const [pastedEvents, setPastedEvents] = useState<PastedEvent[]>(() =>
+    Array.isArray(initialDraft?.pastedEvents) ? initialDraft.pastedEvents : []
+  );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => initialDraft?.analysis || null);
   
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false);
@@ -396,6 +418,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const colorDropdownRef = useRef<HTMLDivElement>(null);
   const mathLatexRef = useRef<HTMLTextAreaElement>(null);
+  const savedMathSelectionRef = useRef<Range | null>(null);
   const svAreaRef = useRef<HTMLDivElement>(null);
   const hueSliderRef = useRef<HTMLDivElement>(null);
   const keyDownTimes = useRef<{ [key: string]: number }>({});
@@ -466,12 +489,14 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     const htmlContent = pageContents.join('<div><br></div>');
 
     return {
+      documentId,
       documentTitle: docTitle,
       content: textContent,
       htmlContent,
       pageContents,
       keystrokeData,
       pastedEvents,
+      analysis,
       editorPreferences: {
         currentFont,
         currentFontSize,
@@ -481,15 +506,15 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
       },
       updatedAt: new Date().toISOString(),
     };
-  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, keystrokeData, pastedEvents, textContent, pageIds]);
+  }, [activeFormats, analysis, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, documentId, keystrokeData, pastedEvents, textContent, pageIds]);
 
   const saveDraftLocally = useCallback((draft: EditorDraftPayload) => {
     try {
-      localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draft));
+      localStorage.setItem(draftStorageKey, JSON.stringify(draft));
     } catch (error) {
       console.error('Local draft save failed:', error);
     }
-  }, []);
+  }, [draftStorageKey]);
 
   const applyDraft = useCallback((draft: EditorDraftPayload) => {
     pendingHydrationRef.current = draft;
@@ -500,6 +525,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     setCurrentAlign(draft.editorPreferences.currentAlign || 'Left');
     setKeystrokeData(Array.isArray(draft.keystrokeData) ? draft.keystrokeData : []);
     setPastedEvents(Array.isArray(draft.pastedEvents) ? draft.pastedEvents : []);
+    setAnalysis(draft.analysis || null);
     setActiveFormats(draft.editorPreferences.activeFormats || {
       bold: false,
       italic: false,
@@ -612,7 +638,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
       syncContent();
       setIsDraftReady(true);
       setIsDocumentLoaded(true);
-      lastServerSavedAtRef.current = pendingDraft.updatedAt;
+      lastServerSavedAtRef.current = hydratedServerTimestampRef.current || pendingDraft.updatedAt;
+      hydratedServerTimestampRef.current = '';
     });
 
     return () => window.cancelAnimationFrame(frameId);
@@ -639,6 +666,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           pageContents: Array.isArray(data.pageContents) && data.pageContents.length > 0 ? data.pageContents : [data.htmlContent || ''],
           keystrokeData: Array.isArray(data.keystrokeData) ? data.keystrokeData : [],
           pastedEvents: Array.isArray(data.pastedEvents) ? data.pastedEvents : [],
+          analysis: data.lastAnalysis || null,
           editorPreferences: {
             currentFont: data.editorPreferences?.currentFont || 'Inter',
             currentFontSize: data.editorPreferences?.currentFontSize || '3',
@@ -658,9 +686,12 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           updatedAt: data.updatedAt || new Date(0).toISOString(),
         };
 
+        const localDraft = readStoredDraft(draftStorageKey);
+        const preferredDraft = getDraftTimestamp(localDraft) > getDraftTimestamp(remoteDraft) ? localDraft ?? remoteDraft : remoteDraft;
+
         if (!cancelled) {
-          setAnalysis(data.lastAnalysis || null);
-          applyDraft(remoteDraft);
+          hydratedServerTimestampRef.current = remoteDraft.updatedAt;
+          applyDraft(preferredDraft);
         }
       } catch (error) {
         console.error('Document load failed:', error);
@@ -676,10 +707,10 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     return () => {
       cancelled = true;
     };
-  }, [applyDraft, documentId, initialDraft, isAuthenticated]);
+  }, [applyDraft, documentId, draftStorageKey, initialDraft, isAuthenticated]);
 
   useEffect(() => {
-    if (!isDraftReady || isAuthenticated) return;
+    if (!isDraftReady) return;
 
     const timeoutId = window.setTimeout(() => {
       const draft = getDraftPayload();
@@ -687,7 +718,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     }, 100);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeFormats, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, content, isAuthenticated, isDraftReady, pageIds, saveDraftLocally, getDraftPayload]);
+  }, [activeFormats, analysis, currentAlign, currentFont, currentFontSize, currentStyle, docTitle, content, isDraftReady, pageIds, saveDraftLocally, getDraftPayload]);
 
   useEffect(() => {
     if (!isDraftReady || !isDocumentLoaded || !isAuthenticated || !documentId || !hasValidAuthToken()) return;
@@ -705,6 +736,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           editorPreferences: draft.editorPreferences,
           keystrokeData,
           pastedEvents,
+          lastAnalysis: draft.analysis,
         });
         lastServerSavedAtRef.current = data.updatedAt || draft.updatedAt;
       } catch (error) {
@@ -713,26 +745,107 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [content, currentAlign, currentFont, currentFontSize, currentStyle, activeFormats, documentId, docTitle, getDraftPayload, isAuthenticated, isDocumentLoaded, isDraftReady, keystrokeData, pastedEvents]);
+  }, [content, currentAlign, currentFont, currentFontSize, currentStyle, activeFormats, analysis, documentId, docTitle, getDraftPayload, isAuthenticated, isDocumentLoaded, isDraftReady, keystrokeData, pastedEvents]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!isDraftReady || isAuthenticated) return;
+      if (!isDraftReady) return;
       const draft = getDraftPayload();
       saveDraftLocally(draft);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [getDraftPayload, isAuthenticated, isDraftReady, saveDraftLocally]);
+  }, [getDraftPayload, isDraftReady, saveDraftLocally]);
 
   const handleInput = () => {
     syncContent();
-    if (!isAuthenticated) saveDraftLocally(getDraftPayload());
     schedulePagination();
   };
 
-  const getNormalizedLineText = (value: string) => value.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
+  const getNormalizedLineText = (value: string) => value.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ').replace(/\u200B/g, '');
+
+  const isMathElement = (node: Node | null): node is HTMLElement =>
+    node instanceof HTMLElement && node.hasAttribute('data-math');
+
+  const isMathCaretSpacer = (node: Node | null): node is Text =>
+    node instanceof Text && node.textContent === '\u200B';
+
+  const getMathNodeToDelete = (selection: Selection, key: 'Backspace' | 'Delete') => {
+    if (!selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) return null;
+
+    const { startContainer, startOffset } = range;
+
+    if (startContainer.nodeType === Node.TEXT_NODE) {
+      const textNode = startContainer as Text;
+      if (key === 'Backspace') {
+        if (textNode.textContent === '\u200B' && startOffset === 1 && isMathElement(textNode.previousSibling)) {
+          return textNode.previousSibling;
+        }
+        if (startOffset === 0) {
+          if (isMathElement(textNode.previousSibling)) return textNode.previousSibling;
+          if (isMathCaretSpacer(textNode.previousSibling) && isMathElement(textNode.previousSibling.previousSibling)) {
+            return textNode.previousSibling.previousSibling;
+          }
+        }
+      }
+
+      if (key === 'Delete') {
+        if (textNode.textContent === '\u200B' && startOffset === 0 && isMathElement(textNode.nextSibling)) {
+          return textNode.nextSibling;
+        }
+        if (startOffset === textNode.length) {
+          if (isMathElement(textNode.nextSibling)) return textNode.nextSibling;
+          if (isMathCaretSpacer(textNode.nextSibling) && isMathElement(textNode.nextSibling.nextSibling)) {
+            return textNode.nextSibling.nextSibling;
+          }
+        }
+      }
+      return null;
+    }
+
+    if (startContainer.nodeType === Node.ELEMENT_NODE) {
+      const element = startContainer as Element;
+      const childBefore = startOffset > 0 ? element.childNodes[startOffset - 1] : null;
+      const childAt = startOffset < element.childNodes.length ? element.childNodes[startOffset] : null;
+
+      if (key === 'Backspace') {
+        if (isMathElement(childBefore)) return childBefore;
+        if (isMathCaretSpacer(childBefore) && isMathElement(childBefore.previousSibling)) return childBefore.previousSibling;
+      }
+
+      if (key === 'Delete') {
+        if (isMathElement(childAt)) return childAt;
+        if (isMathCaretSpacer(childAt) && isMathElement(childAt.nextSibling)) return childAt.nextSibling;
+      }
+    }
+
+    return null;
+  };
+
+  const removeMathNode = (mathNode: HTMLElement, selection: Selection) => {
+    const parent = mathNode.parentNode;
+    if (!parent) return;
+
+    const previousSibling = mathNode.previousSibling;
+    const nextSibling = mathNode.nextSibling;
+    const insertionIndex = Array.prototype.indexOf.call(parent.childNodes, mathNode);
+
+    if (isMathCaretSpacer(previousSibling)) previousSibling.remove();
+    if (isMathCaretSpacer(nextSibling)) nextSibling.remove();
+    mathNode.remove();
+
+    const range = document.createRange();
+    const nextOffset = Math.min(insertionIndex, parent.childNodes.length);
+    range.setStart(parent, nextOffset);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncContent();
+    schedulePagination();
+  };
 
   const getCodeBlockText = (pre: Element) => {
     const rawText = pre instanceof HTMLElement ? pre.innerText : pre.textContent ?? '';
@@ -744,6 +857,15 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     const focusNode = selection && selection.rangeCount > 0 ? getElementFromNode(selection.getRangeAt(0).startContainer) : null;
     const activePre = focusNode ? findClosestTag(focusNode, ['PRE']) : null;
     const activeBlockquote = focusNode ? findClosestTag(focusNode, ['BLOCKQUOTE']) : null;
+
+    if (selection && (e.key === 'Backspace' || e.key === 'Delete')) {
+      const mathNode = getMathNodeToDelete(selection, e.key);
+      if (mathNode) {
+        e.preventDefault();
+        removeMathNode(mathNode, selection);
+        return;
+      }
+    }
 
     if (activePre && selection && (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey)))) {
       e.preventDefault();
@@ -998,7 +1120,35 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
   const handleLinkSubmit = () => { if (linkUrl && editorRef.current) { editorRef.current.focus(); execCommand('createLink', linkUrl); } setShowLinkModal(false); setLinkUrl(''); };
   const handleImageOpen = () => { setImageUrl(''); setShowImageModal(true); };
   const handleImageSubmit = () => { if (imageUrl && editorRef.current) { editorRef.current.focus(); execCommand('insertImage', imageUrl); } setShowImageModal(false); setImageUrl(''); };
-  const handleMathClick = () => { setMathLatex(''); setMathDisplayMode(false); setShowMathModal(true); };
+  const saveMathSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !editorRef.current) return;
+    const range = selection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+    if (editorRef.current.contains(container)) {
+      savedMathSelectionRef.current = range.cloneRange();
+    }
+  };
+
+  const restoreMathSelection = () => {
+    const selection = window.getSelection();
+    const range = savedMathSelectionRef.current;
+    if (!selection || !range) return false;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  };
+
+  const renderMathHtml = useCallback((latex: string, displayMode: boolean) => (
+    katex.renderToString(latex, { displayMode, throwOnError: false })
+  ), []);
+
+  const handleMathClick = () => {
+    saveMathSelection();
+    setMathLatex('');
+    setMathDisplayMode(false);
+    setShowMathModal(true);
+  };
 
   const insertMathSymbol = (latex: string) => {
     const textarea = mathLatexRef.current; if (!textarea) { setMathLatex(prev => prev + ' ' + latex); return; }
@@ -1010,29 +1160,48 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
 
   const validateLatex = (latex: string): { valid: boolean; error?: string; suggestion?: string } => {
     if (!latex.trim()) return { valid: true };
-    const katex = (window as { katex?: { renderToString: (latex: string, options: { displayMode: boolean; throwOnError: boolean }) => string } }).katex; 
-    if (!katex) return { valid: true };
     try { katex.renderToString(latex, { displayMode: false, throwOnError: true }); return { valid: true }; }
     catch (error) { const errorMsg = String(error); return { valid: false, error: errorMsg.split('\n')[0], suggestion: 'Check LaTeX syntax.' }; }
   };
 
   const handleMathSubmit = () => {
     if (mathLatex && editorRef.current) {
-      const katex = (window as { katex?: { renderToString: (latex: string, options: { displayMode: boolean; throwOnError: boolean }) => string } }).katex;
-      if (katex) {
-        try {
-          const html = katex.renderToString(mathLatex, { displayMode: mathDisplayMode, throwOnError: false });
-          const span = document.createElement('span'); span.innerHTML = html; span.contentEditable = 'false';
-          span.style.display = mathDisplayMode ? 'block' : 'inline-block'; span.style.margin = mathDisplayMode ? '0.5em 0' : '0 0.2em';
-          const selection = window.getSelection();
-          if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0); range.deleteContents(); range.insertNode(span);
-            range.setStartAfter(span); range.collapse(true); selection.removeAllRanges(); selection.addRange(range);
-          }
-        } catch (error) { console.error(error); }
-      }
+      try {
+        editorRef.current.focus();
+        const html = renderMathHtml(mathLatex, mathDisplayMode);
+        const span = document.createElement('span');
+        span.innerHTML = html;
+        span.contentEditable = 'false';
+        span.setAttribute('data-math', mathLatex);
+        span.setAttribute('data-display-mode', mathDisplayMode ? 'true' : 'false');
+        span.style.display = 'inline-block';
+        span.style.margin = mathDisplayMode ? '0.5em 0' : '0 0.2em';
+        span.style.verticalAlign = 'middle';
+        if (mathDisplayMode) {
+          span.style.width = '100%';
+          span.style.textAlign = 'center';
+        }
+        const leadingSpacer = document.createTextNode('\u200B');
+        const trailingSpacer = document.createTextNode('\u200B');
+
+        const selection = window.getSelection();
+        const hasRestoredSelection = restoreMathSelection();
+        if (selection && (hasRestoredSelection || selection.rangeCount > 0)) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(trailingSpacer);
+          range.insertNode(span);
+          range.insertNode(leadingSpacer);
+          range.setStart(trailingSpacer, trailingSpacer.textContent?.length ?? 1);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          syncContent();
+          schedulePagination();
+        }
+      } catch (error) { console.error(error); }
     }
-    setShowMathModal(false); setMathLatex('');
+    setShowMathModal(false); setMathLatex(''); savedMathSelectionRef.current = null;
   };
 
   const updateAllColorFormats = useCallback((hex: string) => {
@@ -1409,6 +1578,50 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     setShowExportDropdown(false);
   };
 
+  const handleManualSave = useCallback(async () => {
+    if (!isAuthenticated || !documentId) return;
+    setSaveStatus('saving');
+    try {
+      const draft = getDraftPayload();
+      await api.put(`/documents/${documentId}`, {
+        title: docTitle,
+        content: draft.content,
+        htmlContent: draft.htmlContent,
+        pageContents: draft.pageContents,
+        editorPreferences: draft.editorPreferences,
+        keystrokeData: draft.keystrokeData,
+        pastedEvents: draft.pastedEvents,
+        lastAnalysis: draft.analysis,
+      });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Failed to save document:', error);
+      setSaveStatus('error');
+    } finally {
+    }
+  }, [docTitle, documentId, getDraftPayload, isAuthenticated]);
+
+  const handleOpenDeleteModal = useCallback(() => {
+    setShowDeleteModal(true);
+  }, []);
+
+  const handleDeleteDocument = useCallback(async () => {
+    if (!isAuthenticated || !documentId) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/documents/${documentId}`);
+      localStorage.removeItem(draftStorageKey);
+      navigate('/');
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  }, [documentId, draftStorageKey, isAuthenticated, navigate]);
+
   const handleAnalyze = async () => {
     const draft = getDraftPayload();
 
@@ -1430,6 +1643,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           editorPreferences: draft.editorPreferences,
           keystrokeData,
           pastedEvents,
+          lastAnalysis: draft.analysis,
         });
       }
 
@@ -1452,6 +1666,23 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     autoRunAnalysisRef.current = true;
     void handleAnalyze();
   }, [autoRunAnalysis, isAuthenticated, isDocumentLoaded, isDraftReady]);
+
+  useEffect(() => {
+    if (onActionsReady) {
+      if (isAuthenticated && documentId) {
+        onActionsReady({
+          save: handleManualSave,
+          delete: handleOpenDeleteModal,
+          saveStatus
+        });
+      } else {
+        onActionsReady(null);
+      }
+    }
+    return () => {
+      if (onActionsReady) onActionsReady(null);
+    };
+  }, [documentId, handleManualSave, handleOpenDeleteModal, isAuthenticated, onActionsReady, saveStatus]);
 
   return (
     <div className="main-layout">
@@ -1834,6 +2065,30 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           </div>
         </div>
       )}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="delete-modal-header">
+              <div className="delete-warning-icon">
+                <AlertTriangle size={24} />
+              </div>
+              <h3>Delete Document?</h3>
+              <button className="modal-close-btn" onClick={() => setShowDeleteModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="delete-modal-body">
+              <p>Are you sure you want to delete <strong>"{docTitle}"</strong>?</p>
+              <p className="delete-warning-text">This action cannot be undone and the document will be permanently removed.</p>
+            </div>
+            <div className="modal-actions delete-modal-actions">
+              <button className="btn-secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>Cancel</button>
+              <button className="btn-danger" onClick={handleDeleteDocument} disabled={isDeleting}>{isDeleting ? 'Deleting...' : 'Delete Permanently'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside className="sidebar">
         <div className="sidebar-section">
           <div className="sidebar-title"><Keyboard size={14} /> Session Stats</div>

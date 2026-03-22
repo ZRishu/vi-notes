@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import api from '../api';
 import { Mail, Lock, User, X, LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
 
-const LOCAL_DRAFT_KEY = 'vi-notes-editor-draft';
-const LOCAL_PENDING_ANALYSIS_KEY = 'vi-notes-pending-analysis';
-
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -73,7 +70,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess, initi
       const { data } = await api.post(endpoint, payload);
       localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.userId);
-      
+      if (data.name) {
+        localStorage.setItem('userName', data.name);
+      }
       onSuccess(mode === 'register');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Authentication failed. Please try again.');
