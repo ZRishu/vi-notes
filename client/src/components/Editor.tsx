@@ -74,6 +74,7 @@ interface EditorProps {
   docTitle: string;
   setDocTitle: React.Dispatch<React.SetStateAction<string>>;
   isAuthenticated: boolean;
+  onAuthRequired?: () => void;
   documentId?: string | null;
   autoRunAnalysis?: boolean;
 }
@@ -329,7 +330,7 @@ const getClosestFontSizeValue = (fontSizePx: number) => {
   ).value;
 };
 
-const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated, documentId = null, autoRunAnalysis = false }) => {
+const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated, onAuthRequired, documentId = null, autoRunAnalysis = false }) => {
   const navigate = useNavigate();
   const initialDraftRef = useRef<EditorDraftPayload | null>(isAuthenticated ? null : readLocalDraft());
   const initialDraft = initialDraftRef.current;
@@ -1414,11 +1415,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
     if (!isAuthenticated) {
       saveDraftLocally(draft);
       localStorage.setItem(LOCAL_PENDING_ANALYSIS_KEY, '1');
-      navigate('/login', {
-        state: {
-          message: 'You should login first to use Run Analysis. Your draft has been kept and analysis will continue after login.'
-        }
-      });
+      if (onAuthRequired) onAuthRequired('Authentication required to run AI analysis');
       return;
     }
 

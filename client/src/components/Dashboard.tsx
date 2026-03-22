@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FilePlus2, FileText, Clock3 } from 'lucide-react';
+import { FilePlus2, FileText, Clock3, Trash2, AlertTriangle, X } from 'lucide-react';
 import api from '../api';
 
 interface DocumentItem {
@@ -14,6 +14,8 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const loadDocuments = async () => {
@@ -32,6 +34,28 @@ const Dashboard: React.FC = () => {
     const { data } = await api.post('/documents', { title: 'Untitled Document', pageContents: [''] });
     navigate(`/documents/${data._id}`);
   };
+
+  const confirmDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setDeleteId(id);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/documents/${deleteId}`);
+      setDocuments(documents.filter(doc => doc._id !== deleteId));
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const documentToDelete = documents.find(d => d._id === deleteId);
 
   return (
     <div className="dashboard-page">
@@ -71,9 +95,54 @@ const Dashboard: React.FC = () => {
                 minute: '2-digit'
               })}
             </div>
+            <button 
+              className="document-delete-btn" 
+              onClick={(e) => confirmDelete(e, document._id)}
+              aria-label="Delete document"
+            >
+              <Trash2 size={16} />
+            </button>
           </button>
         ))}
       </div>
+
+      {deleteId && (
+        <div className="modal-overlay" onClick={() => setDeleteId(null)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="delete-modal-header">
+              <div className="delete-warning-icon">
+                <AlertTriangle size={24} />
+              </div>
+              <h3>Delete Document?</h3>
+              <button className="modal-close-btn" onClick={() => setDeleteId(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="delete-modal-body">
+              <p>Are you sure you want to delete <strong>"{documentToDelete?.title || 'Untitled Document'}"</strong>?</p>
+              <p className="delete-warning-text">This action cannot be undone and the document will be permanently removed.</p>
+            </div>
+
+            <div className="modal-actions delete-modal-actions">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setDeleteId(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-danger" 
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -126,4 +126,17 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const document = await Document.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+    res.json({ message: 'Document deleted successfully' });
+  } catch (error) {
+    console.error('Document delete error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router;

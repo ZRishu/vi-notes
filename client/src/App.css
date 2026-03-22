@@ -735,6 +735,7 @@ header {
 }
 
 .document-card {
+  position: relative;
   min-height: 220px;
   padding: 22px;
   border-radius: 16px;
@@ -804,6 +805,130 @@ header {
   font-size: 13px;
 }
 
+.document-delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.document-card:hover .document-delete-btn {
+  opacity: 1;
+}
+
+.document-delete-btn:hover {
+  background: var(--danger-color);
+  color: white;
+  border-color: var(--danger-color);
+  box-shadow: 0 2px 8px rgba(220, 50, 47, 0.25);
+}
+
+.delete-modal {
+  max-width: 440px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.delete-modal-header {
+  padding: 24px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+}
+
+.delete-warning-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(220, 50, 47, 0.1);
+  color: var(--danger-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.delete-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+}
+
+.modal-close-btn:hover {
+  background: var(--surface-muted);
+}
+
+.delete-modal-body {
+  padding: 0 24px 24px;
+  text-align: center;
+}
+
+.delete-modal-body p {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+}
+
+.delete-warning-text {
+  font-size: 14px;
+  color: var(--text-secondary) !important;
+}
+
+.delete-modal-actions {
+  padding: 16px 24px;
+  background: var(--surface-muted);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-danger {
+  background-color: var(--danger-color);
+  color: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-danger:hover {
+  background-color: #b52a27;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .score-display {
   display: flex;
   align-items: baseline;
@@ -844,36 +969,96 @@ header {
   margin-bottom: 8px;
 }
 
-/* Auth Pages */
-.auth-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background-color: var(--bg-color);
-}
-
-.auth-card {
-  width: 100%;
+.auth-modal-content {
   max-width: 400px;
+  width: 90%;
+  padding: 48px 40px 40px;
+  position: relative;
   background-color: var(--surface-color);
-  padding: 28px;
-  border-radius: 12px;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
 }
 
-.auth-card h2 {
-  margin-top: 0;
-  margin-bottom: 24px;
-  font-size: 22px;
-  color: var(--text-primary);
+.modal-close-icon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  z-index: 10;
 }
 
-.auth-form {
+.modal-close-icon:hover {
+  background-color: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.auth-modal-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-mode-toggle {
+  display: flex;
+  background-color: var(--surface-muted);
+  padding: 4px;
+  border-radius: 12px;
+  margin: 0 auto 28px;
+  gap: 4px;
+  max-width: 280px;
+}
+
+.toggle-btn {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.toggle-btn.active {
+  background-color: var(--surface-color);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-modal-header h2 {
+  font-size: 24px;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.auth-modal-header p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.auth-modal-info-banner {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background-color: var(--accent-light);
+  color: var(--accent-color);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 138, 26, 0.1);
+  display: inline-block;
+}
+
+.auth-modal-form {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -883,89 +1068,124 @@ header {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
 }
 
 .input-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.auth-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: none;
-  border-radius: 8px;
-  background-color: transparent;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
-  font-family: 'Inter', sans-serif;
-  font-size: 16px;
-  transition: all 0.2s;
+  text-align: left;
+  margin-left: 2px;
 }
 
-.auth-input:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-.auth-link {
-  color: var(--accent-color);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.auth-link:hover {
-  text-decoration: underline;
-}
-
-.auth-footer {
-  margin-top: 24px;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.input-with-icon {
+.input-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border: 1px solid var(--border-color);
-  background: var(--surface-muted);
-  border-radius: 8px;
-  padding: 0 12px;
-  color: var(--text-secondary);
+  width: 100%;
 }
 
-.input-with-icon:focus-within {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+.input-wrapper > .lucide {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  transition: color 0.2s;
+  z-index: 2;
+}
+
+.auth-input-slim {
+  width: 100%;
+  padding: 8px 40px 8px 38px !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px !important;
+  background-color: var(--surface-muted) !important;
+  color: var(--text-primary) !important;
+  font-size: 14px !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+  height: 38px !important;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-input-slim:focus {
+  outline: none !important;
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 3px var(--focus-ring) !important;
+  background-color: var(--surface-color) !important;
+}
+
+.auth-input-slim:focus ~ .lucide {
   color: var(--accent-color);
 }
 
-.auth-submit {
-  justify-content: center;
-}
-
-.auth-feedback {
-  margin: 14px 0 0;
-  font-size: 14px;
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
   color: var(--text-secondary);
-}
-
-.error-text {
-  color: var(--danger-color);
-}
-
-.auth-link-btn {
-  color: var(--accent-color);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+  z-index: 3;
 }
 
-.auth-link-btn:hover {
-  text-decoration: underline;
+.password-toggle-btn:hover {
+  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.password-toggle-btn .lucide {
+  position: static; /* Override the absolute positioning if it leaked */
+}
+
+.auth-submit-slim {
+  margin-top: 12px;
+  height: 40px;
+  background-color: var(--btn-primary-bg);
+  color: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auth-submit-slim:hover {
+  background-color: var(--btn-primary-hover);
+  transform: translateY(-1px);
+}
+
+.auth-submit-slim:active {
+  transform: translateY(0);
+}
+
+.auth-submit-slim:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-modal-error {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--danger-color);
+  text-align: center;
+  padding: 8px;
+  background: rgba(220, 50, 47, 0.05);
+  border-radius: 8px;
 }
 
 /* GitHub Markdown Styles within the Writing Area */

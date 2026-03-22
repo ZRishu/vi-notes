@@ -1,54 +1,3 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import Editor from './components/Editor';
-import Dashboard from './components/Dashboard';
-import AuthModal from './components/AuthModal';
-import { Moon, Sun, LogOut, LogIn } from 'lucide-react';
-import { hasValidAuthToken } from './api';
-import './App.css';
-
-const LOCAL_TITLE_KEY = 'vi-notes-document-title';
-const LOCAL_DRAFT_KEY = 'vi-notes-editor-draft';
-
-const ProtectedRoute = ({ children, onAuthRequired }: { children: React.ReactNode, onAuthRequired: (msg?: string) => void }) => {
-  const authed = hasValidAuthToken();
-  useEffect(() => {
-    if (!authed) onAuthRequired();
-  }, [authed, onAuthRequired]);
-  
-  return authed ? <>{children}</> : null;
-};
-
-const HomeRoute = ({ docTitle, setDocTitle, onAuthRequired }: { docTitle: string; setDocTitle: React.Dispatch<React.SetStateAction<string>>, onAuthRequired: (msg?: string) => void }) => {
-  if (hasValidAuthToken()) {
-    return <Dashboard />;
-  }
-  return <Editor docTitle={docTitle} setDocTitle={setDocTitle} isAuthenticated={false} onAuthRequired={onAuthRequired} />;
-};
-
-const DocumentEditorRoute = ({ docTitle, setDocTitle }: { docTitle: string; setDocTitle: React.Dispatch<React.SetStateAction<string>> }) => {
-  const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const shouldAnalyzeOnLoad = searchParams.get('analyze') === '1';
-
-  useEffect(() => {
-    if (!shouldAnalyzeOnLoad) return;
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('analyze');
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams, shouldAnalyzeOnLoad]);
-
-  return (
-    <Editor
-      docTitle={docTitle}
-      setDocTitle={setDocTitle}
-      isAuthenticated={true}
-      documentId={id ?? null}
-      autoRunAnalysis={shouldAnalyzeOnLoad}
-    />
-  );
-};
-
 const AppShell = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,15 +48,12 @@ const AppShell = () => {
     setIsAuthModalOpen(false);
     setAuthModalMessage(null);
     
-    // Check if there is content in the editor
     const draft = localStorage.getItem(LOCAL_DRAFT_KEY);
     const hasContent = draft && JSON.parse(draft).content?.trim().length > 0;
 
     if (hasContent && location.pathname === '/') {
-      // Stay on editor if content exists
       window.location.reload(); 
     } else {
-      // Otherwise go to dashboard
       navigate('/');
     }
   };
@@ -179,7 +125,7 @@ const AppShell = () => {
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Routes>
-          <Route path="/" element={<HomeRoute docTitle={docTitle} setDocTitle={setDocTitle} onAuthRequired={(msg) => { setAuthModalMessage(msg || 'Please sign in to continue'); setIsAuthModalOpen(true); }} />} />
+          <Route path="/" element={<HomeRoute docTitle={docTitle} setDocTitle={setDocTitle} onAuthRequired={(msg) => { setAuthModalMessage(msg || null); setIsAuthModalOpen(true); }} />} />
           <Route path="/documents/:id" element={<ProtectedRoute onAuthRequired={() => { setAuthModalMessage('Authentication required to access this document'); setIsAuthModalOpen(true); }}><DocumentEditorRoute docTitle={docTitle} setDocTitle={setDocTitle} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -194,13 +140,3 @@ const AppShell = () => {
     </div>
   );
 };
-
-function App() {
-  return (
-    <Router>
-      <AppShell />
-    </Router>
-  );
-}
-
-export default App;
