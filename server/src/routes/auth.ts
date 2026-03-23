@@ -2,6 +2,7 @@ import express from 'express';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { serverConfig } from '../config.js';
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.post('/register', async (req, res) => {
 
     const user = new User({ name, email, password });
     await user.save();
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    const token = jwt.sign({ userId: user._id }, serverConfig.jwtSecret, { expiresIn: '1h' });
     res.status(201).json({ message: 'User registered successfully', token, userId: user._id, name: user.name });
   } catch (error) {
     console.error('Auth error:', error);
@@ -43,7 +44,7 @@ router.post('/login', async (req, res) => {
     const isMatch = await (user as any).comparePassword(password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    const token = jwt.sign({ userId: user._id }, serverConfig.jwtSecret, { expiresIn: '1h' });
     res.json({ token, userId: user._id, name: user.name });
   } catch (error) {
     console.error('Auth error:', error);

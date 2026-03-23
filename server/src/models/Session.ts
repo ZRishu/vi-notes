@@ -26,9 +26,9 @@ const sessionSchema = new mongoose.Schema({
   isDraft: { type: Boolean, default: false },
   keystrokeData: [{
     type: { type: String, enum: ['keydown', 'keyup'] },
-    keyCode: { type: String }, // Optional, maybe just key name/code but not character if strictly "actual characters typed must not be stored"
+    keyCode: { type: String },
     timestamp: { type: Number },
-    duration: { type: Number } // Time since last event or specific duration if applicable
+    duration: { type: Number } 
   }],
   pastedEvents: [{
     timestamp: { type: Number },
@@ -39,7 +39,7 @@ const sessionSchema = new mongoose.Schema({
     verificationTag: { type: String },
     generatedAt: { type: Date },
     authenticityScore: { type: Number },
-    typingSpeed: { type: Number }, // characters per minute
+    typingSpeed: { type: Number },
     speedVariance: { type: Number },
     pauseCount: { type: Number },
     microPauseCount: { type: Number },

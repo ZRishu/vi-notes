@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clientConfig } from './config';
 
 const decodeJwtPayload = (token: string) => {
   try {
@@ -27,7 +28,7 @@ export const getValidAuthToken = () => {
 export const hasValidAuthToken = () => !!getValidAuthToken();
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: clientConfig.apiBaseUrl,
 });
 
 api.interceptors.request.use((config) => {

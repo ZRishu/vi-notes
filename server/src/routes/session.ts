@@ -174,7 +174,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         textLength: item.textLength
       }));
 
-    // Perform AI Behavioral Analysis
+    // Perform AI Analysis
     const analysis = analyzeSession(content, sanitizedKeystrokes, sanitizedPastes);
 
     if (documentId) {

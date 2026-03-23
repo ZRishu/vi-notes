@@ -68,7 +68,7 @@ export function analyzeSession(content: string, keystrokeData: KeystrokeData[], 
     score -= pastedRatio > 0.4 ? 45 : 20;
   }
 
-  // 2. Typing Speed (CPM)
+  // 2. Typing Speed
   let typingSpeed = 0;
   const keyDownEvents = keystrokeData.filter((event) => event.type === 'keydown');
   if (keystrokeData.length > 0) {
@@ -128,7 +128,7 @@ export function analyzeSession(content: string, keystrokeData: KeystrokeData[], 
     (speedVariance < 50 && keystrokeData.length > 50 ? 20 : 0)
   )));
   
-  // Heuristic: Humans have variance. Too much or too little is suspicious.
+  // Too much or too little variance is suspicious.
   if (speedVariance < 50 && keystrokeData.length > 50) {
     suspiciousFlags.push('Robotic typing speed consistency detected.');
     supportingEvidence.push(`Speed variance stayed unusually low at ${Math.round(speedVariance)} across ${keyDownEvents.length} keystrokes.`);
