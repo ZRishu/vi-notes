@@ -17,6 +17,24 @@ interface EditorActions {
   analyzeBeforeExit: () => Promise<void>;
 }
 
+interface TooltipState {
+  text: string;
+  top: number;
+  left: number;
+  placement: 'top' | 'bottom' | 'left' | 'right';
+}
+
+const TOOLTIP_SELECTOR = [
+  '[data-tooltip]',
+  'button[aria-label]',
+  '[role="button"][aria-label]',
+].join(', ');
+
+const getTooltipText = (element: HTMLElement | null): string => {
+  if (!element) return '';
+  return element.getAttribute('data-tooltip') || element.getAttribute('aria-label') || '';
+};
+
 const ProtectedRoute = ({ children, onAuthRequired }: { children: React.ReactNode, onAuthRequired: (msg?: string) => void }) => {
   const authed = hasValidAuthToken();
   useEffect(() => {
@@ -37,7 +55,7 @@ const AppShell = () => {
     if (savedTheme === 'light' || savedTheme === 'dark') {
       return savedTheme;
     }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'light';
   });
   const [docTitle, setDocTitle] = useState(() => localStorage.getItem(LOCAL_TITLE_KEY) || 'Untitled Document');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -45,6 +63,7 @@ const AppShell = () => {
   const [editorActions, setEditorActions] = useState<EditorActions | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(hasValidAuthToken());
   const [isNavigatingDashboard, setIsNavigatingDashboard] = useState(false);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -69,6 +88,78 @@ const AppShell = () => {
   useEffect(() => {
     setIsAuthenticated(hasValidAuthToken());
   }, [location.pathname]);
+
+  useEffect(() => {
+    const updateTooltip = (element: HTMLElement | null) => {
+      const text = getTooltipText(element);
+      if (!element || !text || element.hasAttribute('disabled')) {
+        setTooltip(null);
+        return;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const toolbarButton = element.closest('.toolbar-container');
+      const sidebarButton = element.closest('.sidebar-rail');
+      const expandedSidebar = element.closest('.sidebar.expanded');
+      let placement: TooltipState['placement'];
+      let top: number;
+      let left: number;
+
+      if (toolbarButton) {
+        placement = 'bottom';
+        top = rect.bottom + 12;
+        left = rect.left + rect.width / 2;
+      } else if (sidebarButton) {
+        placement = expandedSidebar ? 'right' : 'left';
+        top = rect.top + rect.height / 2;
+        left = expandedSidebar ? rect.right + 12 : rect.left - 12;
+      } else {
+        const spaceAbove = rect.top;
+        placement = spaceAbove > 52 ? 'top' : 'bottom';
+        top = placement === 'top' ? rect.top - 12 : rect.bottom + 12;
+        left = rect.left + rect.width / 2;
+      }
+
+      setTooltip({ text, top, left, placement });
+    };
+
+    const handlePointerOver = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>(TOOLTIP_SELECTOR) : null;
+      updateTooltip(target);
+    };
+
+    const handlePointerOut = (event: Event) => {
+      const relatedTarget = event instanceof MouseEvent && event.relatedTarget instanceof Element
+        ? event.relatedTarget.closest<HTMLElement>(TOOLTIP_SELECTOR)
+        : null;
+      if (!relatedTarget) {
+        setTooltip(null);
+      }
+    };
+
+    const handleFocusIn = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>(TOOLTIP_SELECTOR) : null;
+      updateTooltip(target);
+    };
+
+    const hideTooltip = () => setTooltip(null);
+
+    window.addEventListener('mouseover', handlePointerOver);
+    window.addEventListener('mouseout', handlePointerOut);
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', hideTooltip);
+    window.addEventListener('scroll', hideTooltip, true);
+    window.addEventListener('resize', hideTooltip);
+
+    return () => {
+      window.removeEventListener('mouseover', handlePointerOver);
+      window.removeEventListener('mouseout', handlePointerOut);
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', hideTooltip);
+      window.removeEventListener('scroll', hideTooltip, true);
+      window.removeEventListener('resize', hideTooltip);
+    };
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
@@ -178,7 +269,8 @@ const AppShell = () => {
               <button
                 type="button"
                 className="header-action-btn"
-                title="Go back to Dashboard"
+                data-tooltip="Go back to Dashboard"
+                aria-label="Go back to Dashboard"
                 onClick={handleGoToDashboard}
                 disabled={isNavigatingDashboard}
               >
@@ -190,7 +282,8 @@ const AppShell = () => {
                   <button 
                     className="header-action-btn" 
                     onClick={editorActions.save} 
-                    title="Save current document"
+                    data-tooltip="Save current document"
+                    aria-label="Save current document"
                     disabled={editorActions.saveStatus === 'saving'}
                   >
                     <Save size={18} className={editorActions.saveStatus === 'saved' ? 'text-success' : ''} />
@@ -201,7 +294,8 @@ const AppShell = () => {
                   <button 
                     className="header-action-btn danger-hover" 
                     onClick={editorActions.delete} 
-                    title="Delete current document"
+                    data-tooltip="Delete current document"
+                    aria-label="Delete current document"
                   >
                     <Trash2 size={18} />
                     <span className="header-action-label">Delete</span>
@@ -256,6 +350,16 @@ const AppShell = () => {
         onSuccess={handleAuthSuccess}
         message={authModalMessage}
       />
+
+      {tooltip && (
+        <div
+          className={`app-tooltip app-tooltip-${tooltip.placement}`}
+          style={{ top: tooltip.top, left: tooltip.left }}
+          role="tooltip"
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 };

@@ -234,7 +234,7 @@ const Dashboard: React.FC = () => {
               className="document-report-btn"
               onClick={(e) => void handleViewReport(e, document)}
               aria-label={document.lastAnalysis ? 'View latest report' : 'Generate report'}
-              title={document.lastAnalysis ? 'View latest verified report' : 'Generate latest report'}
+              data-tooltip={document.lastAnalysis ? 'View latest verified report' : 'Generate latest report'}
               disabled={reportLoadingId === document._id}
             >
               {reportLoadingId === document._id ? <LoaderCircle size={15} className="spin-icon" /> : <ShieldCheck size={15} />}

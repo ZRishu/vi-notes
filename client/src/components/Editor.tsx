@@ -1755,8 +1755,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
       <div className="editor-wrapper">
         <div className="toolbar-container" style={{ flexWrap: 'wrap', padding: '16px 12px' }}>
           <div className="toolbar" style={{ flexWrap: 'wrap' }}>
-            <button className="toolbar-btn" onClick={() => execCommand('undo')} title="Undo"><Undo size={16} /></button>
-            <button className="toolbar-btn" onClick={() => execCommand('redo')} title="Redo"><Redo size={16} /></button>
+            <button className="toolbar-btn" onClick={() => execCommand('undo')} data-tooltip="Undo" aria-label="Undo"><Undo size={16} /></button>
+            <button className="toolbar-btn" onClick={() => execCommand('redo')} data-tooltip="Redo" aria-label="Redo"><Redo size={16} /></button>
             <div className="toolbar-separator" />
             <div className="custom-dropdown-container" ref={fontDropdownRef}>
               <button className="custom-dropdown-btn" onClick={() => setShowFontDropdown(!showFontDropdown)}>
@@ -1771,7 +1771,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
             </div>
             <div className="toolbar-separator" />
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <button className="toolbar-btn" onClick={() => changeFontSize(-1)} title="Decrease Font Size" style={{ padding: '4px' }}><Minus size={14} /></button>
+              <button className="toolbar-btn" onClick={() => changeFontSize(-1)} data-tooltip="Decrease font size" aria-label="Decrease font size" style={{ padding: '4px' }}><Minus size={14} /></button>
               <div className="custom-dropdown-container" ref={fontSizeDropdownRef}>
                 <button className="custom-dropdown-btn" onClick={() => setShowFontSizeDropdown(!showFontSizeDropdown)} style={{ padding: '4px 8px', justifyContent: 'center' }}>
                   <span style={{ whiteSpace: 'nowrap' }}>{FONT_SIZES.find(s => s.value === currentFontSize)?.label || '16pt'}</span>
@@ -1782,11 +1782,11 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
                   </div>
                 )}
               </div>
-              <button className="toolbar-btn" onClick={() => changeFontSize(1)} title="Increase Font Size" style={{ padding: '4px' }}><Plus size={14} /></button>
+              <button className="toolbar-btn" onClick={() => changeFontSize(1)} data-tooltip="Increase font size" aria-label="Increase font size" style={{ padding: '4px' }}><Plus size={14} /></button>
             </div>
             <div className="toolbar-separator" />
             <div className="custom-dropdown-container" ref={styleDropdownRef}>
-              <button className="custom-dropdown-btn" onClick={() => setShowStyleDropdown(!showStyleDropdown)} title="Text Style">
+              <button className="custom-dropdown-btn" onClick={() => setShowStyleDropdown(!showStyleDropdown)} data-tooltip="Text style" aria-label="Text style">
                 <span style={{ whiteSpace: 'nowrap' }}>{currentStyle}</span>
                 <ChevronDown size={14} style={{ flexShrink: 0 }} />
               </button>
@@ -1800,13 +1800,13 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
               )}
             </div>
             <div className="toolbar-separator" />
-            <button className={`toolbar-btn ${activeFormats.bold ? 'active' : ''}`} onClick={() => execCommand('bold')} title="Bold"><Bold size={16} /></button>
-            <button className={`toolbar-btn ${activeFormats.italic ? 'active' : ''}`} onClick={() => execCommand('italic')} title="Italic"><Italic size={16} /></button>
-            <button className={`toolbar-btn ${activeFormats.underline ? 'active' : ''}`} onClick={() => execCommand('underline')} title="Underline"><Underline size={16} /></button>
-            <button className={`toolbar-btn ${activeFormats.strikeThrough ? 'active' : ''}`} onClick={() => execCommand('strikeThrough')} title="Strikethrough"><Strikethrough size={16} /></button>
+            <button className={`toolbar-btn ${activeFormats.bold ? 'active' : ''}`} onClick={() => execCommand('bold')} data-tooltip="Bold" aria-label="Bold"><Bold size={16} /></button>
+            <button className={`toolbar-btn ${activeFormats.italic ? 'active' : ''}`} onClick={() => execCommand('italic')} data-tooltip="Italic" aria-label="Italic"><Italic size={16} /></button>
+            <button className={`toolbar-btn ${activeFormats.underline ? 'active' : ''}`} onClick={() => execCommand('underline')} data-tooltip="Underline" aria-label="Underline"><Underline size={16} /></button>
+            <button className={`toolbar-btn ${activeFormats.strikeThrough ? 'active' : ''}`} onClick={() => execCommand('strikeThrough')} data-tooltip="Strikethrough" aria-label="Strikethrough"><Strikethrough size={16} /></button>
             <div className="toolbar-separator" />
             <div className="custom-dropdown-container" ref={alignDropdownRef}>
-              <button className="toolbar-btn" onClick={() => setShowAlignDropdown(!showAlignDropdown)} title={`Align ${currentAlign}`} style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
+              <button className="toolbar-btn" onClick={() => setShowAlignDropdown(!showAlignDropdown)} data-tooltip={`Align ${currentAlign}`} aria-label={`Align ${currentAlign}`} style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
                 {currentAlign === 'Left' && <AlignLeft size={16} />}
                 {currentAlign === 'Center' && <AlignCenter size={16} />}
                 {currentAlign === 'Right' && <AlignRight size={16} />}
@@ -1825,7 +1825,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
                 className={`toolbar-btn ${activeFormats.unorderedList || activeFormats.orderedList ? 'active' : ''}`}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={toggleBulletList}
-                title="Bulleted List"
+                data-tooltip="Bulleted list"
+                aria-label="Bulleted list"
                 style={{ borderRadius: '6px 0 0 6px' }}
               >
                 <List size={16} />
@@ -1834,7 +1835,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
                 className="toolbar-btn"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowListDropdown(!showListDropdown)}
-                title="List Styles"
+                data-tooltip="List styles"
+                aria-label="List styles"
                 style={{ borderRadius: '0 6px 6px 0', padding: '6px' }}
               >
                 <ChevronDown size={12} style={{ opacity: 0.7 }} />
@@ -1853,7 +1855,8 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
               className={`toolbar-btn ${activeFormats.blockquote ? 'active' : ''}`}
               onMouseDown={(e) => e.preventDefault()}
               onClick={toggleQuoteLine}
-              title="Quote"
+              data-tooltip="Quote"
+              aria-label="Quote"
             >
               <Quote size={16} />
             </button>
@@ -1861,18 +1864,19 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
               className={`toolbar-btn ${activeFormats.codeBlock ? 'active' : ''}`}
               onMouseDown={(e) => e.preventDefault()}
               onClick={toggleCodeBlock}
-              title="Code Block"
+              data-tooltip="Code block"
+              aria-label="Code block"
             >
               <Code size={16} />
             </button>
-            <button className="toolbar-btn" onClick={insertHorizontalRule} title="Divider"><Minus size={16} /></button>
+            <button className="toolbar-btn" onClick={insertHorizontalRule} data-tooltip="Divider" aria-label="Divider"><Minus size={16} /></button>
             <div className="toolbar-separator" />
-            <button className="toolbar-btn" onClick={handleLinkOpen} title="Insert Link"><Link2 size={16} /></button>
-            <button className="toolbar-btn" onClick={handleImageOpen} title="Insert Image"><ImageIcon size={16} /></button>
-            <button className="toolbar-btn" onClick={handleMathClick} title="Insert Math Equation"><Sigma size={16} /></button>
+            <button className="toolbar-btn" onClick={handleLinkOpen} data-tooltip="Insert link" aria-label="Insert link"><Link2 size={16} /></button>
+            <button className="toolbar-btn" onClick={handleImageOpen} data-tooltip="Insert image" aria-label="Insert image"><ImageIcon size={16} /></button>
+            <button className="toolbar-btn" onClick={handleMathClick} data-tooltip="Insert math equation" aria-label="Insert math equation"><Sigma size={16} /></button>
             <div className="toolbar-separator" />
             <div className="custom-dropdown-container" ref={colorDropdownRef}>
-              <button className="toolbar-btn" onClick={() => setShowColorDropdown(!showColorDropdown)} title="Text & Highlight Color" style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
+              <button className="toolbar-btn" onClick={() => setShowColorDropdown(!showColorDropdown)} data-tooltip="Text and highlight color" aria-label="Text and highlight color" style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
                 <Palette size={16} />
                 <ChevronDown size={12} style={{ opacity: 0.7 }} />
               </button>
@@ -1884,9 +1888,9 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
               )}
             </div>
             <div className="toolbar-separator" />
-            <button className="toolbar-btn" onClick={handlePrint} title="Print Document"><Printer size={16} /></button>
+            <button className="toolbar-btn" onClick={handlePrint} data-tooltip="Print document" aria-label="Print document"><Printer size={16} /></button>
             <div className="custom-dropdown-container" ref={exportDropdownRef}>
-              <button className={`toolbar-btn ${showExportDropdown ? 'active' : ''}`} onClick={() => setShowExportDropdown(!showExportDropdown)} title="Export Document" style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
+              <button className={`toolbar-btn ${showExportDropdown ? 'active' : ''}`} onClick={() => setShowExportDropdown(!showExportDropdown)} data-tooltip="Export document" aria-label="Export document" style={{ display: 'flex', gap: '4px', padding: '6px 8px', borderRadius: '6px' }}>
                 <Share size={16} />
                 <ChevronDown size={12} style={{ opacity: 0.7 }} />
               </button>
@@ -1954,7 +1958,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
                   <div key={categoryGroup.category} className="math-category">
                     <div className="math-category-title">{categoryGroup.category}</div>
                     <div className="math-symbols-grid">
-                      {categoryGroup.symbols.map((symbol, idx) => <button key={idx} className="math-symbol-btn" onClick={() => insertMathSymbol(symbol.latex)} title={symbol.desc}>{symbol.label}</button>)}
+                      {categoryGroup.symbols.map((symbol, idx) => <button key={idx} className="math-symbol-btn" onClick={() => insertMathSymbol(symbol.latex)} data-tooltip={symbol.desc} aria-label={symbol.desc}>{symbol.label}</button>)}
                     </div>
                   </div>
                 ))}
@@ -2016,7 +2020,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
                         style={{ backgroundColor: color, color: getContrastColor(color) }}
                         onClick={() => updateAllColorFormats(color)}
                         onDoubleClick={applyColor}
-                        title={color}
+                        data-tooltip={color}
                         aria-label={`Select ${color}`}
                       >
                         <span>{color.replace('#', '')}</span>
@@ -2267,7 +2271,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
           <button
             className="sidebar-icon-btn"
             onClick={() => setIsSidebarExpanded((prev) => !prev)}
-            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            data-tooltip={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
             aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
           >
             {isSidebarExpanded ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
@@ -2276,7 +2280,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
             className={`sidebar-icon-btn sidebar-icon-transition sidebar-icon-btn-primary ${isSidebarExpanded ? 'is-hidden' : ''}`}
             onClick={() => void handleAnalyze()}
             disabled={isAnalyzing || textContent.length === 0}
-            title={isAnalyzing ? 'Generating report' : 'Run analysis'}
+            data-tooltip={isAnalyzing ? 'Generating report' : 'Run analysis'}
             aria-label={isAnalyzing ? 'Generating report' : 'Run analysis'}
           >
             <Activity size={18} />
@@ -2285,7 +2289,7 @@ const Editor: React.FC<EditorProps> = ({ docTitle, setDocTitle, isAuthenticated,
             className={`sidebar-icon-btn sidebar-icon-transition ${isSidebarExpanded ? 'is-hidden' : ''}`}
             onClick={() => setShowAnalysisReport(true)}
             disabled={!analysis}
-            title="View latest report"
+            data-tooltip="View latest report"
             aria-label="View latest report"
           >
             <FileSearch size={18} />
